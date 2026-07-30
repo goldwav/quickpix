@@ -1,7 +1,8 @@
 import quadVert from './shaders/quad.vert?raw'
 import adjustFrag from './shaders/adjust.frag?raw'
+import detailFrag from './shaders/detail.frag?raw'
 import { bakeCurveLut } from '@shared/curve'
-import { IDENTITY_CURVE, type EditParams } from '@shared/editParams'
+import { IDENTITY_CURVE, type CropState, type EditParams } from '@shared/editParams'
 
 export interface HistogramData {
   r: Uint32Array
@@ -12,23 +13,56 @@ export interface HistogramData {
   total: number
 }
 
+export interface FitRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface RenderOptions {
+  /** Render the full uncropped frame (used by the crop tool). */
+  ignoreCrop?: boolean
+}
+
 const HIST_SIZE = 128
+/** Cap on the intermediate FBO used by the detail pass (memory guard). */
+const MAX_WORK_DIM = 4096
+
+interface CropUniforms {
+  originX: number
+  originY: number
+  sizeX: number
+  sizeY: number
+  cos: number
+  sin: number
+  scale: number
+  outW: number
+  outH: number
+}
 
 /**
- * WebGL2 preview pipeline: one pointwise adjustment pass rendered straight to
- * the canvas. render() is a pure function of (image texture, EditParams) —
- * all edit state lives outside the GPU.
+ * WebGL2 preview pipeline. Pass 1 (adjust) does geometry + all pointwise
+ * color work; pass 2 (detail) adds sharpen/clarity and only runs when needed.
+ * render() is a pure function of (image texture, EditParams).
  */
 export class GLPipeline {
   private gl: WebGL2RenderingContext
-  private program: WebGLProgram
-  private uniforms = new Map<string, WebGLUniformLocation>()
+  private adjustProg: WebGLProgram
+  private detailProg: WebGLProgram
+  private uniformCache = new Map<string, WebGLUniformLocation | null>()
   private imageTex: WebGLTexture | null = null
   private curveTex: WebGLTexture
   private histFbo: WebGLFramebuffer
   private histTex: WebGLTexture
   private histPixels = new Uint8Array(HIST_SIZE * HIST_SIZE * 4)
+  private workFbo: WebGLFramebuffer | null = null
+  private workTex: WebGLTexture | null = null
+  private workW = 0
+  private workH = 0
   private lastCurveKey = ''
+  /** Letterbox rect of the last on-screen render, in device pixels. */
+  lastFitRect: FitRect = { x: 0, y: 0, w: 0, h: 0 }
   imageWidth = 0
   imageHeight = 0
 
@@ -39,18 +73,17 @@ export class GLPipeline {
     if (!gl) throw new Error('WebGL2 is not available')
     this.gl = gl
 
-    this.program = this.createProgram(quadVert, adjustFrag)
+    this.adjustProg = this.createProgram(quadVert, adjustFrag)
+    this.detailProg = this.createProgram(quadVert, detailFrag)
 
     // Identity curve LUT so the shader can sample unconditionally.
-    this.curveTex = this.createLutTexture()
+    this.curveTex = this.createTexture(gl.LINEAR)
     this.uploadCurve(bakeCurveLut(IDENTITY_CURVE))
 
     // Small offscreen target for histogram sampling.
-    this.histTex = gl.createTexture()
+    this.histTex = this.createTexture(gl.NEAREST)
     gl.bindTexture(gl.TEXTURE_2D, this.histTex)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, HIST_SIZE, HIST_SIZE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
     this.histFbo = gl.createFramebuffer()
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.histFbo)
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.histTex, 0)
@@ -64,12 +97,8 @@ export class GLPipeline {
   setImage(bitmap: ImageBitmap): void {
     const gl = this.gl
     if (this.imageTex) gl.deleteTexture(this.imageTex)
-    this.imageTex = gl.createTexture()
+    this.imageTex = this.createTexture(gl.LINEAR)
     gl.bindTexture(gl.TEXTURE_2D, this.imageTex)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, bitmap)
     this.imageWidth = bitmap.width
     this.imageHeight = bitmap.height
@@ -80,11 +109,13 @@ export class GLPipeline {
   }
 
   /** Draw the adjusted image, letterboxed into the current canvas size. */
-  render(params: EditParams): void {
+  render(params: EditParams, opts: RenderOptions = {}): void {
     const gl = this.gl
     if (!this.imageTex) return
 
     this.updateCurveIfNeeded(params)
+    const crop = this.cropUniforms(opts.ignoreCrop ? null : params.crop)
+    const needDetail = params.sharpen > 0 || params.clarity !== 0
 
     const cw = this.canvas.width
     const ch = this.canvas.height
@@ -95,12 +126,34 @@ export class GLPipeline {
 
     // Aspect-fit letterbox with a small margin.
     const margin = 24
-    const scale = Math.min((cw - margin * 2) / this.imageWidth, (ch - margin * 2) / this.imageHeight)
-    const w = Math.max(1, Math.round(this.imageWidth * scale))
-    const h = Math.max(1, Math.round(this.imageHeight * scale))
-    gl.viewport(Math.round((cw - w) / 2), Math.round((ch - h) / 2), w, h)
+    const scale = Math.min((cw - margin * 2) / crop.outW, (ch - margin * 2) / crop.outH)
+    const w = Math.max(1, Math.round(crop.outW * scale))
+    const h = Math.max(1, Math.round(crop.outH * scale))
+    const fit: FitRect = { x: Math.round((cw - w) / 2), y: Math.round((ch - h) / 2), w, h }
+    this.lastFitRect = fit
 
-    this.drawPass(params, 1)
+    if (!needDetail) {
+      gl.viewport(fit.x, fit.y, fit.w, fit.h)
+      this.drawAdjust(params, crop, 1)
+      return
+    }
+
+    // Two-pass: adjust into work FBO, then detail to screen.
+    const workScale = Math.min(1, MAX_WORK_DIM / Math.max(crop.outW, crop.outH))
+    const ww = Math.max(1, Math.round(crop.outW * workScale))
+    const wh = Math.max(1, Math.round(crop.outH * workScale))
+    this.ensureWorkTarget(ww, wh)
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.workFbo)
+    gl.viewport(0, 0, ww, wh)
+    this.drawAdjust(params, crop, 0)
+
+    gl.bindTexture(gl.TEXTURE_2D, this.workTex)
+    gl.generateMipmap(gl.TEXTURE_2D)
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    gl.viewport(fit.x, fit.y, fit.w, fit.h)
+    this.drawDetail(params, ww, wh, 1)
   }
 
   /** Render small and read back to build the histogram. Call throttled. */
@@ -115,7 +168,8 @@ export class GLPipeline {
     this.updateCurveIfNeeded(params)
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.histFbo)
     gl.viewport(0, 0, HIST_SIZE, HIST_SIZE)
-    this.drawPass(params, 0)
+    // Detail pass barely affects a 128px histogram — adjust pass is enough.
+    this.drawAdjust(params, this.cropUniforms(params.crop), 0)
     gl.readPixels(0, 0, HIST_SIZE, HIST_SIZE, gl.RGBA, gl.UNSIGNED_BYTE, this.histPixels)
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 
@@ -135,40 +189,115 @@ export class GLPipeline {
   dispose(): void {
     const gl = this.gl
     if (this.imageTex) gl.deleteTexture(this.imageTex)
+    if (this.workTex) gl.deleteTexture(this.workTex)
+    if (this.workFbo) gl.deleteFramebuffer(this.workFbo)
     gl.deleteTexture(this.curveTex)
     gl.deleteTexture(this.histTex)
     gl.deleteFramebuffer(this.histFbo)
-    gl.deleteProgram(this.program)
+    gl.deleteProgram(this.adjustProg)
+    gl.deleteProgram(this.detailProg)
   }
 
   // ---------- internals ----------
 
-  private drawPass(params: EditParams, flipY: number): void {
+  /** Output dims + rotation uniforms for a crop (or identity for null). */
+  private cropUniforms(crop: CropState | null): CropUniforms {
+    const W = this.imageWidth
+    const H = this.imageHeight
+    if (!crop) {
+      return { originX: 0, originY: 0, sizeX: 1, sizeY: 1, cos: 1, sin: 0, scale: 1, outW: W, outH: H }
+    }
+    const theta = (crop.angle * Math.PI) / 180
+    const ac = Math.abs(Math.cos(theta))
+    const as = Math.abs(Math.sin(theta))
+    // Auto-fill: shrink the sampling frame so the rotated frame stays inside
+    // the source image (no blank corners while straightening).
+    const k = Math.min(W / (W * ac + H * as), H / (W * as + H * ac))
+    return {
+      originX: crop.left,
+      originY: crop.top,
+      sizeX: crop.width,
+      sizeY: crop.height,
+      cos: Math.cos(theta),
+      sin: Math.sin(theta),
+      scale: k,
+      outW: Math.max(1, Math.round(crop.width * W)),
+      outH: Math.max(1, Math.round(crop.height * H))
+    }
+  }
+
+  private drawAdjust(params: EditParams, crop: CropUniforms, flipY: number): void {
     const gl = this.gl
-    gl.useProgram(this.program)
+    gl.useProgram(this.adjustProg)
+    const loc = (n: string): WebGLUniformLocation | null => this.loc(this.adjustProg, 'a:', n)
 
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, this.imageTex)
-    gl.uniform1i(this.loc('u_image'), 0)
+    gl.uniform1i(loc('u_image'), 0)
     gl.activeTexture(gl.TEXTURE1)
     gl.bindTexture(gl.TEXTURE_2D, this.curveTex)
-    gl.uniform1i(this.loc('u_curve'), 1)
+    gl.uniform1i(loc('u_curve'), 1)
 
-    gl.uniform1f(this.loc('u_flipY'), flipY)
-    gl.uniform1f(this.loc('u_exposure'), params.exposure)
-    gl.uniform1f(this.loc('u_contrast'), params.contrast / 100)
-    gl.uniform1f(this.loc('u_highlights'), params.highlights / 100)
-    gl.uniform1f(this.loc('u_shadows'), params.shadows / 100)
-    gl.uniform1f(this.loc('u_whites'), params.whites / 100)
-    gl.uniform1f(this.loc('u_blacks'), params.blacks / 100)
-    gl.uniform1f(this.loc('u_temp'), params.temp / 100)
-    gl.uniform1f(this.loc('u_tint'), params.tint / 100)
-    gl.uniform1f(this.loc('u_vibrance'), params.vibrance / 100)
-    gl.uniform1f(this.loc('u_saturation'), params.saturation / 100)
-    gl.uniform1f(this.loc('u_vignette'), params.vignette / 100)
-    gl.uniform1f(this.loc('u_grain'), params.grain / 100)
+    gl.uniform1f(loc('u_flipY'), flipY)
+    gl.uniform1f(loc('u_exposure'), params.exposure)
+    gl.uniform1f(loc('u_contrast'), params.contrast / 100)
+    gl.uniform1f(loc('u_highlights'), params.highlights / 100)
+    gl.uniform1f(loc('u_shadows'), params.shadows / 100)
+    gl.uniform1f(loc('u_whites'), params.whites / 100)
+    gl.uniform1f(loc('u_blacks'), params.blacks / 100)
+    gl.uniform1f(loc('u_temp'), params.temp / 100)
+    gl.uniform1f(loc('u_tint'), params.tint / 100)
+    gl.uniform1f(loc('u_vibrance'), params.vibrance / 100)
+    gl.uniform1f(loc('u_saturation'), params.saturation / 100)
+    gl.uniform1f(loc('u_vignette'), params.vignette / 100)
+    gl.uniform1f(loc('u_grain'), params.grain / 100)
+
+    gl.uniform2f(loc('u_cropOrigin'), crop.originX, crop.originY)
+    gl.uniform2f(loc('u_cropSize'), crop.sizeX, crop.sizeY)
+    gl.uniform2f(loc('u_imageSize'), this.imageWidth, this.imageHeight)
+    gl.uniform1f(loc('u_rotCos'), crop.cos)
+    gl.uniform1f(loc('u_rotSin'), crop.sin)
+    gl.uniform1f(loc('u_rotScale'), crop.scale)
 
     gl.drawArrays(gl.TRIANGLES, 0, 3)
+  }
+
+  private drawDetail(params: EditParams, texW: number, texH: number, flipY: number): void {
+    const gl = this.gl
+    gl.useProgram(this.detailProg)
+    const loc = (n: string): WebGLUniformLocation | null => this.loc(this.detailProg, 'd:', n)
+
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindTexture(gl.TEXTURE_2D, this.workTex)
+    gl.uniform1i(loc('u_tex'), 0)
+    gl.uniform1f(loc('u_flipY'), flipY)
+    gl.uniform2f(loc('u_texel'), 1 / texW, 1 / texH)
+    gl.uniform1f(loc('u_sharpen'), params.sharpen / 100)
+    gl.uniform1f(loc('u_clarity'), params.clarity / 100)
+    // Blur radius for clarity scales with resolution: level ≈ size/64 px.
+    gl.uniform1f(loc('u_clarityLod'), Math.max(2, Math.log2(Math.max(texW, texH) / 64)))
+
+    gl.drawArrays(gl.TRIANGLES, 0, 3)
+  }
+
+  private ensureWorkTarget(w: number, h: number): void {
+    if (this.workTex && this.workW === w && this.workH === h) return
+    const gl = this.gl
+    if (this.workTex) gl.deleteTexture(this.workTex)
+    if (this.workFbo) gl.deleteFramebuffer(this.workFbo)
+    this.workTex = gl.createTexture()
+    gl.bindTexture(gl.TEXTURE_2D, this.workTex)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texStorage2D(gl.TEXTURE_2D, Math.floor(Math.log2(Math.max(w, h))) + 1, gl.RGBA8, w, h)
+    this.workFbo = gl.createFramebuffer()
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.workFbo)
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.workTex, 0)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    this.workW = w
+    this.workH = h
   }
 
   private updateCurveIfNeeded(params: EditParams): void {
@@ -184,27 +313,25 @@ export class GLPipeline {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, lut)
   }
 
-  private createLutTexture(): WebGLTexture {
+  private createTexture(filter: number): WebGLTexture {
     const gl = this.gl
     const tex = gl.createTexture()
     gl.bindTexture(gl.TEXTURE_2D, tex)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter)
     return tex
   }
 
-  private loc(name: string): WebGLUniformLocation | null {
-    let u = this.uniforms.get(name)
+  private loc(program: WebGLProgram, prefix: string, name: string): WebGLUniformLocation | null {
+    const key = prefix + name
+    let u = this.uniformCache.get(key)
     if (u === undefined) {
-      const found = this.gl.getUniformLocation(this.program, name)
-      if (found) {
-        this.uniforms.set(name, found)
-        u = found
-      }
+      u = this.gl.getUniformLocation(program, name)
+      this.uniformCache.set(key, u)
     }
-    return u ?? null
+    return u
   }
 
   private createProgram(vertSrc: string, fragSrc: string): WebGLProgram {

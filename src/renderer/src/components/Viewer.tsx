@@ -3,7 +3,8 @@ import { useLibraryStore, useSelectedImage } from '../state/libraryStore'
 import { useEditStore } from '../state/editStore'
 import { DEFAULT_EDIT_PARAMS } from '@shared/editParams'
 import { getImageUrl } from '../lib/imageUrl'
-import { GLPipeline } from '../gl/pipeline'
+import { GLPipeline, type FitRect } from '../gl/pipeline'
+import { CropOverlay } from './CropOverlay'
 
 /** Cap preview textures; full resolution is only needed at export time. */
 const MAX_PREVIEW_DIM = 6144
@@ -13,6 +14,7 @@ export function Viewer(): React.JSX.Element {
   const openFolder = useLibraryStore((s) => s.openFolder)
   const params = useEditStore((s) => s.params)
   const showOriginal = useEditStore((s) => s.showOriginal)
+  const cropMode = useEditStore((s) => s.cropMode)
   const activate = useEditStore((s) => s.activate)
 
   // The canvas element lives in state (set via callback ref) so effects
@@ -22,6 +24,7 @@ export function Viewer(): React.JSX.Element {
   const [imageReady, setImageReady] = useState(false)
   const [glError, setGlError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [fitRect, setFitRect] = useState<FitRect | null>(null)
   const histTimer = useRef<number | null>(null)
 
   const canvasRef = useCallback((el: HTMLCanvasElement | null) => setCanvasEl(el), [])
@@ -112,7 +115,19 @@ export function Viewer(): React.JSX.Element {
   // single cheap draw, and React already batches slider updates per event.
   useEffect(() => {
     if (!pipeline || !imageReady) return
-    pipeline.render(showOriginal ? DEFAULT_EDIT_PARAMS : params)
+    let effective = showOriginal ? DEFAULT_EDIT_PARAMS : params
+    if (cropMode) {
+      // Crop tool: show the full frame with only the straighten angle applied,
+      // so the crop rect selects within the live-rotated image.
+      effective = {
+        ...effective,
+        crop: { left: 0, top: 0, width: 1, height: 1, angle: effective.crop?.angle ?? 0 }
+      }
+    }
+    pipeline.render(effective)
+    const dpr = window.devicePixelRatio || 1
+    const f = pipeline.lastFitRect
+    setFitRect({ x: f.x / dpr, y: f.y / dpr, w: f.w / dpr, h: f.h / dpr })
 
     // Histogram readback stalls the GPU slightly — throttle it.
     if (histTimer.current === null) {
@@ -123,7 +138,7 @@ export function Viewer(): React.JSX.Element {
         s.setHistogram(pipeline.computeHistogram(s.showOriginal ? DEFAULT_EDIT_PARAMS : s.params))
       }, 120)
     }
-  }, [pipeline, imageReady, params, showOriginal])
+  }, [pipeline, imageReady, params, showOriginal, cropMode])
 
   if (!image) {
     return (
@@ -151,6 +166,9 @@ export function Viewer(): React.JSX.Element {
       )}
       {loading && <div className="loading-badge">Loading…</div>}
       {showOriginal && <div className="compare-badge">Original</div>}
+      {cropMode && fitRect && pipeline && (
+        <CropOverlay fit={fitRect} imageWidth={pipeline.imageWidth} imageHeight={pipeline.imageHeight} />
+      )}
     </div>
   )
 }

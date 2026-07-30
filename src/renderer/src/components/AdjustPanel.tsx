@@ -1,5 +1,6 @@
 import { useEditStore, type SliderKey } from '../state/editStore'
 import { useSelectedImage } from '../state/libraryStore'
+import { CurveEditor } from './CurveEditor'
 import { Histogram } from './Histogram'
 import { PanelSection } from './PanelSection'
 import { Slider } from './Slider'
@@ -11,6 +12,8 @@ export function AdjustPanel(): React.JSX.Element {
   const params = useEditStore((s) => s.params)
   const setParam = useEditStore((s) => s.setParam)
   const resetAll = useEditStore((s) => s.resetAll)
+  const cropMode = useEditStore((s) => s.cropMode)
+  const setCropMode = useEditStore((s) => s.setCropMode)
 
   if (!image) {
     return (
@@ -27,6 +30,13 @@ export function AdjustPanel(): React.JSX.Element {
   return (
     <aside className="panel">
       <Histogram />
+
+      <div className="tool-row">
+        <button className={`btn${cropMode ? ' primary' : ''}`} onClick={() => setCropMode(!cropMode)}>
+          ⬚ Crop &amp; Straighten
+        </button>
+        {params.crop && !cropMode && <span className="crop-indicator">cropped</span>}
+      </div>
 
       <PanelSection title="White Balance">
         {slider('Temp', 'temp')}
@@ -51,8 +61,22 @@ export function AdjustPanel(): React.JSX.Element {
       </PanelSection>
 
       <PanelSection title="Presence">
+        {slider('Clarity', 'clarity')}
         {slider('Vibrance', 'vibrance')}
         {slider('Saturation', 'saturation')}
+      </PanelSection>
+
+      <PanelSection title="Tone Curve" defaultOpen={false}>
+        <CurveEditor />
+      </PanelSection>
+
+      <PanelSection title="Detail" defaultOpen={false}>
+        {slider('Sharpen', 'sharpen', 0, 100)}
+      </PanelSection>
+
+      <PanelSection title="Effects" defaultOpen={false}>
+        {slider('Vignette', 'vignette')}
+        {slider('Grain', 'grain', 0, 100)}
       </PanelSection>
 
       <div className="panel-actions">

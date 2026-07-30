@@ -20,6 +20,15 @@ uniform float u_saturation; // -1..1
 uniform float u_vignette;   // -1..1 (negative darkens corners)
 uniform float u_grain;      // 0..1
 
+// Crop/straighten: output uv -> crop rect in rotated frame -> inverse-rotated
+// source uv. Identity when no crop: origin (0,0), size (1,1), cos 1, sin 0, scale 1.
+uniform vec2 u_cropOrigin;
+uniform vec2 u_cropSize;
+uniform vec2 u_imageSize;
+uniform float u_rotCos;
+uniform float u_rotSin;
+uniform float u_rotScale;
+
 in vec2 v_uv;
 out vec4 outColor;
 
@@ -32,7 +41,13 @@ float hash(vec2 p) {
 }
 
 void main() {
-  vec4 tex = texture(u_image, v_uv);
+  // --- Geometry: crop rect within the straightened frame ---
+  vec2 frameUv = u_cropOrigin + v_uv * u_cropSize;
+  vec2 pix = (frameUv - 0.5) * u_imageSize;
+  vec2 srcPix = vec2(u_rotCos * pix.x - u_rotSin * pix.y, u_rotSin * pix.x + u_rotCos * pix.y) * u_rotScale;
+  vec2 uv = srcPix / u_imageSize + 0.5;
+
+  vec4 tex = texture(u_image, clamp(uv, 0.0, 1.0));
   vec3 c = srgb2lin(tex.rgb);
 
   // --- White balance (linear) ---
@@ -80,7 +95,7 @@ void main() {
   c.g = texture(u_curve, vec2(c.g * (255.0 / 256.0) + 0.5 / 256.0, 0.5)).g;
   c.b = texture(u_curve, vec2(c.b * (255.0 / 256.0) + 0.5 / 256.0, 0.5)).b;
 
-  // --- Vignette (radial, after tone) ---
+  // --- Vignette (radial in the final composition) ---
   vec2 p = v_uv - 0.5;
   float dist = length(p) * 1.41421356;
   float vig = 1.0 + u_vignette * smoothstep(0.4, 1.05, dist) * 0.85;

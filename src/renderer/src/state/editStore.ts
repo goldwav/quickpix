@@ -18,6 +18,8 @@ interface EditState {
   byPath: Record<string, EditParams>
   /** Hold-\ compare: render defaults instead of params. */
   showOriginal: boolean
+  /** Crop tool overlay active. */
+  cropMode: boolean
   histogram: HistogramData | null
 
   setParam: (key: SliderKey, value: number) => void
@@ -26,6 +28,7 @@ interface EditState {
   /** Switch editing context when the selected photo changes. */
   activate: (path: string | null) => void
   setShowOriginal: (v: boolean) => void
+  setCropMode: (v: boolean) => void
   setHistogram: (h: HistogramData) => void
 }
 
@@ -34,6 +37,7 @@ export const useEditStore = create<EditState>((set, get) => ({
   activePath: null,
   byPath: {},
   showOriginal: false,
+  cropMode: false,
   histogram: null,
 
   setParam: (key, value) => {
@@ -57,9 +61,14 @@ export const useEditStore = create<EditState>((set, get) => ({
   activate: (path) => {
     if (path === get().activePath) return
     const stored = path ? get().byPath[path] : undefined
-    set({ activePath: path, params: stored ? stored : cloneParams(DEFAULT_EDIT_PARAMS) })
+    set({ activePath: path, params: stored ? stored : cloneParams(DEFAULT_EDIT_PARAMS), cropMode: false })
   },
 
   setShowOriginal: (v) => set({ showOriginal: v }),
+  setCropMode: (v) => set({ cropMode: v }),
   setHistogram: (h) => set({ histogram: h })
 }))
+
+if (import.meta.env.DEV) {
+  ;(window as unknown as Record<string, unknown>)['__qpEditStore'] = useEditStore
+}

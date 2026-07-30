@@ -313,6 +313,172 @@ input[type='range']:active::-webkit-slider-thumb {
   font-size: 10px;
 }
 
+/* ---------- Tool row & curve editor ---------- */
+
+.tool-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.crop-indicator {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.curve-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.curve-channels {
+  display: flex;
+  gap: 4px;
+}
+
+.curve-channel {
+  background: var(--bg-input);
+  color: var(--text-dim);
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.curve-channel.active {
+  background: var(--bg-panel-raised);
+}
+
+.curve-channel.reset {
+  margin-left: auto;
+}
+
+.curve-svg {
+  width: 100%;
+  aspect-ratio: 1;
+  background: #161616;
+  border-radius: 4px;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.curve-hint {
+  font-size: 10px;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+/* ---------- Crop overlay ---------- */
+
+.crop-overlay {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.crop-dim {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.crop-rect {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  cursor: move;
+  box-sizing: border-box;
+}
+
+.thirds {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+}
+
+.thirds.v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.thirds.h {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.crop-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: transparent;
+}
+
+.crop-handle::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  background: #fff;
+  border: 1px solid #222;
+  border-radius: 1px;
+}
+
+.crop-handle.nw { left: -7px; top: -7px; cursor: nwse-resize; }
+.crop-handle.n  { left: calc(50% - 7px); top: -7px; cursor: ns-resize; }
+.crop-handle.ne { right: -7px; top: -7px; cursor: nesw-resize; }
+.crop-handle.e  { right: -7px; top: calc(50% - 7px); cursor: ew-resize; }
+.crop-handle.se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+.crop-handle.s  { left: calc(50% - 7px); bottom: -7px; cursor: ns-resize; }
+.crop-handle.sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+.crop-handle.w  { left: -7px; top: calc(50% - 7px); cursor: ew-resize; }
+
+.crop-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(24, 24, 24, 0.92);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.crop-toolbar select {
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+.angle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.angle-label input[type='range'] {
+  width: 130px;
+}
+
+.angle-value {
+  min-width: 42px;
+  text-align: right;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Filmstrip ---------- */
 
 .filmstrip {

@@ -41,7 +41,7 @@ export interface EditParams {
   tint: number
   vibrance: number
   saturation: number
-  /** Presence & detail (clarity/sharpen are 0..100). */
+  /** Clarity -100..100 (negative softens), sharpen 0..100. */
   clarity: number
   sharpen: number
   /** Effects: vignette -100 (dark corners)..+100 (bright), grain 0..100. */
