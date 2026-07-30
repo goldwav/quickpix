@@ -3,6 +3,7 @@ import { useLibraryStore, useSelectedImage } from '../state/libraryStore'
 import { useEditStore } from '../state/editStore'
 import { DEFAULT_EDIT_PARAMS } from '@shared/editParams'
 import { getImageUrl } from '../lib/imageUrl'
+import { toast } from '../state/uiStore'
 import { GLPipeline, type FitRect } from '../gl/pipeline'
 import { CropOverlay } from './CropOverlay'
 
@@ -122,6 +123,7 @@ export function Viewer(): React.JSX.Element {
         setImageReady(true)
       } catch (err) {
         console.error('[QuickPix] Failed to load image:', err)
+        toast('error', `Couldn't load ${image.name}`)
       } finally {
         if (!cancelled) setLoading(false)
       }

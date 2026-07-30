@@ -11,9 +11,21 @@ import { QPX_SCHEME } from '@shared/protocol'
 protocol.registerSchemesAsPrivileged([
   {
     scheme: QPX_SCHEME,
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: false }
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+      bypassCSP: false
+    }
   }
 ])
+
+// CDP endpoint for dev tooling (headless renderer tests). Never in production.
+if (!app.isPackaged) {
+  app.commandLine.appendSwitch('remote-debugging-port', '9223')
+}
 
 async function createWindow(): Promise<void> {
   const settings = await getSettings()
