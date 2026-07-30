@@ -1,6 +1,8 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
-import type { OpenFolderResult } from '@shared/types'
+import type { OpenFolderResult, Preset } from '@shared/types'
 import { isPathAllowed, listImages, setAllowedFolder } from './library'
+import { readSidecar, writeSidecar } from './sidecar'
+import { deletePreset, listPresets, savePreset } from './presets'
 
 export function registerIpcHandlers(): void {
   ipcMain.handle('dialog:openFolder', async (event): Promise<OpenFolderResult | null> => {
@@ -22,4 +24,13 @@ export function registerIpcHandlers(): void {
     if (!isPathAllowed(folder)) throw new Error('Folder not opened')
     return listImages(folder)
   })
+
+  ipcMain.handle('sidecar:read', (_event, imagePath: string) => readSidecar(imagePath))
+  ipcMain.handle('sidecar:write', (_event, imagePath: string, data: unknown | null) =>
+    writeSidecar(imagePath, data)
+  )
+
+  ipcMain.handle('presets:list', () => listPresets())
+  ipcMain.handle('presets:save', (_event, preset: Preset) => savePreset(preset))
+  ipcMain.handle('presets:delete', (_event, name: string) => deletePreset(name))
 }

@@ -4,7 +4,7 @@
  * generated sample images so the full UI + GL pipeline can be developed and
  * tested with `vite` alone.
  */
-import type { ImageFileInfo, OpenFolderResult } from '@shared/types'
+import type { ImageFileInfo, OpenFolderResult, Preset } from '@shared/types'
 import { registerImageUrlOverride } from './lib/imageUrl'
 
 interface Sample {
@@ -126,9 +126,35 @@ export async function installDevMock(): Promise<void> {
   const infos = images.map((i) => i.info)
   const result: OpenFolderResult = { folder: '(browser dev) Sample Photos', images: infos }
 
+  const sidecars = new Map<string, unknown>()
+  const PRESETS_KEY = 'quickpix.dev.presets'
+  const loadPresets = (): Preset[] => {
+    try {
+      return JSON.parse(localStorage.getItem(PRESETS_KEY) ?? '[]')
+    } catch {
+      return []
+    }
+  }
+  const storePresets = (list: Preset[]): Preset[] => {
+    localStorage.setItem(PRESETS_KEY, JSON.stringify(list))
+    return list
+  }
+
   window.quickpix = {
     openFolder: async () => result,
-    listImages: async () => infos
+    listImages: async () => infos,
+    readSidecar: async (p) => sidecars.get(p) ?? null,
+    writeSidecar: async (p, data) => {
+      if (data === null) sidecars.delete(p)
+      else sidecars.set(p, data)
+    },
+    listPresets: async () => loadPresets(),
+    savePreset: async (preset) => {
+      const list = loadPresets().filter((x) => x.name !== preset.name)
+      list.push(preset)
+      return storePresets(list)
+    },
+    deletePreset: async (name) => storePresets(loadPresets().filter((x) => x.name !== name))
   }
   console.info('[QuickPix] Browser dev mock installed — sample photos available via Open Folder.')
 }

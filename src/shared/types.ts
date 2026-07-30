@@ -22,10 +22,25 @@ export interface OpenFolderResult {
  */
 export const SUPPORTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.avif'] as const
 
+/** A named, reusable set of edit parameters ("filter"). */
+export interface Preset {
+  name: string
+  /** EditParams shape (typed loosely here to keep shared/types dependency-free). */
+  params: unknown
+}
+
 /** API surface exposed to the renderer via the preload contextBridge. */
 export interface QuickPixApi {
   /** Show a folder picker; resolves null if the user cancels. */
   openFolder(): Promise<OpenFolderResult | null>
   /** Re-enumerate images in a previously opened folder. */
   listImages(folder: string): Promise<ImageFileInfo[]>
+  /** Read the .qpx sidecar for an image; null when none exists. */
+  readSidecar(imagePath: string): Promise<unknown | null>
+  /** Write (or delete, when data is null) the .qpx sidecar for an image. */
+  writeSidecar(imagePath: string, data: unknown | null): Promise<void>
+  /** User preset management (persisted in the app's user-data folder). */
+  listPresets(): Promise<Preset[]>
+  savePreset(preset: Preset): Promise<Preset[]>
+  deletePreset(name: string): Promise<Preset[]>
 }

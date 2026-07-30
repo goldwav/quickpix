@@ -13,6 +13,7 @@ export function Viewer(): React.JSX.Element {
   const image = useSelectedImage()
   const openFolder = useLibraryStore((s) => s.openFolder)
   const params = useEditStore((s) => s.params)
+  const previewParams = useEditStore((s) => s.previewParams)
   const showOriginal = useEditStore((s) => s.showOriginal)
   const cropMode = useEditStore((s) => s.cropMode)
   const activate = useEditStore((s) => s.activate)
@@ -115,7 +116,7 @@ export function Viewer(): React.JSX.Element {
   // single cheap draw, and React already batches slider updates per event.
   useEffect(() => {
     if (!pipeline || !imageReady) return
-    let effective = showOriginal ? DEFAULT_EDIT_PARAMS : params
+    let effective = showOriginal ? DEFAULT_EDIT_PARAMS : (previewParams ?? params)
     if (cropMode) {
       // Crop tool: show the full frame with only the straighten angle applied,
       // so the crop rect selects within the live-rotated image.
@@ -138,7 +139,7 @@ export function Viewer(): React.JSX.Element {
         s.setHistogram(pipeline.computeHistogram(s.showOriginal ? DEFAULT_EDIT_PARAMS : s.params))
       }, 120)
     }
-  }, [pipeline, imageReady, params, showOriginal, cropMode])
+  }, [pipeline, imageReady, params, previewParams, showOriginal, cropMode])
 
   if (!image) {
     return (
