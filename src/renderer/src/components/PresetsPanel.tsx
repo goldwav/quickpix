@@ -4,6 +4,7 @@ import { normalizeParams, type EditParams } from '@shared/editParams'
 import { BUILTIN_PRESETS } from '../presets/builtin'
 import { useEditStore } from '../state/editStore'
 import { useSelectedImage } from '../state/libraryStore'
+import { toast } from '../state/uiStore'
 import { PanelSection } from './PanelSection'
 
 export function PresetsPanel(): React.JSX.Element {
@@ -55,11 +56,15 @@ export function PresetsPanel(): React.JSX.Element {
     const name = newName.trim()
     if (!name) return
     const params: EditParams = { ...structuredClone(useEditStore.getState().params), crop: null }
-    void window.quickpix.savePreset({ name, params }).then((list) => {
-      setUserPresets(list)
-      setSaving(false)
-      setNewName('')
-    })
+    void window.quickpix
+      .savePreset({ name, params })
+      .then((list) => {
+        setUserPresets(list)
+        setSaving(false)
+        setNewName('')
+        toast('success', `Preset “${name}” saved`)
+      })
+      .catch(() => toast('error', "Couldn't save preset"))
   }
 
   return (

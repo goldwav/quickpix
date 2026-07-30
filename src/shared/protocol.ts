@@ -8,17 +8,27 @@
  */
 export const QPX_SCHEME = 'qpx'
 export const QPX_HOST = 'local'
+export const QPX_THUMB_HOST = 'thumb'
 
 export function pathToQpxUrl(absolutePath: string): string {
   return `${QPX_SCHEME}://${QPX_HOST}/${encodeURIComponent(absolutePath)}`
 }
 
+export function pathToQpxThumbUrl(absolutePath: string): string {
+  return `${QPX_SCHEME}://${QPX_THUMB_HOST}/${encodeURIComponent(absolutePath)}`
+}
+
+/** Extract the file path from either qpx:// host. */
 export function qpxUrlToPath(url: string): string | null {
-  const prefix = `${QPX_SCHEME}://${QPX_HOST}/`
-  if (!url.startsWith(prefix)) return null
-  try {
-    return decodeURIComponent(url.slice(prefix.length))
-  } catch {
-    return null
+  for (const host of [QPX_HOST, QPX_THUMB_HOST]) {
+    const prefix = `${QPX_SCHEME}://${host}/`
+    if (url.startsWith(prefix)) {
+      try {
+        return decodeURIComponent(url.slice(prefix.length))
+      } catch {
+        return null
+      }
+    }
   }
+  return null
 }

@@ -16,17 +16,23 @@ export interface OpenFolderResult {
 }
 
 /**
- * Image formats Chromium can decode natively in <img>/createImageBitmap.
- * TIFF is intentionally absent — it needs a decoder (sharp) and lands with the
- * export pipeline; RAW lands later still (see README roadmap).
+ * Formats QuickPix can open. Most decode natively in Chromium; TIFF is
+ * transcoded by the main process (sharp) behind the qpx:// protocol.
+ * RAW lands later (see README roadmap).
  */
-export const SUPPORTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.avif'] as const
+export const SUPPORTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.avif', '.tif', '.tiff'] as const
 
 /** A named, reusable set of edit parameters ("filter"). */
 export interface Preset {
   name: string
   /** EditParams shape (typed loosely here to keep shared/types dependency-free). */
   params: unknown
+}
+
+export interface SessionInfo {
+  lastFolder?: string
+  lastSelectedPath?: string
+  recentFolders: string[]
 }
 
 export interface ExportImageOptions {
@@ -41,6 +47,24 @@ export interface ExportImageResult {
   error?: string
 }
 
+export interface ExportBatchItem {
+  imagePath: string
+  params: unknown
+}
+
+export interface ExportBatchResult {
+  ok: boolean
+  outDir?: string
+  done: number
+  failed: string[]
+  error?: string
+}
+
+export interface ExportProgress {
+  done: number
+  total: number
+}
+
 /** API surface exposed to the renderer via the preload contextBridge. */
 export interface QuickPixApi {
   /** Show a folder picker; resolves null if the user cancels. */
@@ -49,10 +73,18 @@ export interface QuickPixApi {
   listImages(folder: string): Promise<ImageFileInfo[]>
   /** Open a dropped file/folder path (folder of the file is opened). */
   openPath(path: string): Promise<OpenFolderResult | null>
+  /** Restore-session info: last folder/photo and recent folders. */
+  getSession(): Promise<SessionInfo>
+  /** Remember the currently selected photo for next launch. */
+  setSelectedPath(path: string): Promise<void>
   /** Resolve the filesystem path of a dropped File object. */
   getPathForFile(file: File): string
   /** Export with edits baked in; shows a save dialog in the main process. */
   exportImage(imagePath: string, params: unknown, options: ExportImageOptions): Promise<ExportImageResult>
+  /** Export several photos to a picked folder; progress via onExportProgress. */
+  exportBatch(items: ExportBatchItem[], options: ExportImageOptions): Promise<ExportBatchResult>
+  /** Subscribe to batch-export progress; returns an unsubscribe function. */
+  onExportProgress(cb: (p: ExportProgress) => void): () => void
   /** Read the .qpx sidecar for an image; null when none exists. */
   readSidecar(imagePath: string): Promise<unknown | null>
   /** Write (or delete, when data is null) the .qpx sidecar for an image. */

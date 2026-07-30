@@ -145,7 +145,11 @@ export async function installDevMock(): Promise<void> {
     listImages: async () => infos,
     openPath: async () => result,
     getPathForFile: () => '',
+    getSession: async () => ({ recentFolders: [] }),
+    setSelectedPath: async () => {},
     exportImage: async () => ({ ok: false, error: 'Export requires the desktop app (npm run dev)' }),
+    exportBatch: async () => ({ ok: false, done: 0, failed: [], error: 'Export requires the desktop app (npm run dev)' }),
+    onExportProgress: () => () => {},
     readSidecar: async (p) => sidecars.get(p) ?? null,
     writeSidecar: async (p, data) => {
       if (data === null) sidecars.delete(p)

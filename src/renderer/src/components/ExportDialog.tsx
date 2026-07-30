@@ -1,42 +1,89 @@
-import { useState } from 'react'
-import type { ExportImageOptions } from '@shared/types'
+import { useEffect, useState } from 'react'
+import type { ExportBatchItem, ExportImageOptions } from '@shared/types'
+import { cloneParams, DEFAULT_EDIT_PARAMS, normalizeParams } from '@shared/editParams'
 import { useEditStore } from '../state/editStore'
-import { useSelectedImage } from '../state/libraryStore'
+import { getExportTargets, useLibraryStore } from '../state/libraryStore'
+import { toast } from '../state/uiStore'
 
 interface ExportDialogProps {
   onClose: () => void
 }
 
 export function ExportDialog({ onClose }: ExportDialogProps): React.JSX.Element | null {
-  const image = useSelectedImage()
+  const targets = getExportTargets()
+  const images = useLibraryStore((s) => s.images)
   const [format, setFormat] = useState<ExportImageOptions['format']>('jpeg')
   const [quality, setQuality] = useState(90)
   const [resize, setResize] = useState(0)
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
-  if (!image) return null
+  useEffect(() => window.quickpix.onExportProgress(setProgress), [])
+
+  if (targets.length === 0) return null
+  const single = targets.length === 1
+  const title = single
+    ? `Export “${images.find((i) => i.path === targets[0])?.name ?? ''}”`
+    : `Export ${targets.length} photos`
+
+  /** Edit params for a photo: in-memory first, then sidecar, then neutral. */
+  const paramsFor = async (path: string): Promise<unknown> => {
+    const cached = useEditStore.getState().byPath[path]
+    if (cached) return cached
+    try {
+      const sidecar = (await window.quickpix.readSidecar(path)) as { params?: unknown } | null
+      if (sidecar?.params) return normalizeParams(sidecar.params)
+    } catch {
+      // fall through to neutral
+    }
+    return cloneParams(DEFAULT_EDIT_PARAMS)
+  }
 
   const doExport = (): void => {
     setBusy(true)
     setMessage(null)
-    const params = useEditStore.getState().params
-    void window.quickpix
-      .exportImage(image.path, params, { format, quality, resizeLongEdge: resize || undefined })
-      .then((res) => {
-        setBusy(false)
-        if (res.ok) {
-          setMessage(`Saved to ${res.outPath}`)
-        } else if (res.error !== 'canceled') {
-          setMessage(`Export failed: ${res.error}`)
+    setProgress(null)
+    const options = { format, quality, resizeLongEdge: resize || undefined }
+
+    void (async () => {
+      try {
+        if (single) {
+          const res = await window.quickpix.exportImage(targets[0], await paramsFor(targets[0]), options)
+          if (res.ok) {
+            toast('success', `Exported to ${res.outPath}`)
+            onClose()
+          } else if (res.error !== 'canceled') {
+            setMessage(`Export failed: ${res.error}`)
+          }
+        } else {
+          const items: ExportBatchItem[] = []
+          for (const path of targets) items.push({ imagePath: path, params: await paramsFor(path) })
+          const res = await window.quickpix.exportBatch(items, options)
+          if (res.error === 'canceled') {
+            // user closed the folder picker — stay in the dialog
+          } else if (res.ok) {
+            toast('success', `Exported ${res.done} photos to ${res.outDir}`)
+            onClose()
+          } else {
+            setMessage(
+              res.done > 0
+                ? `Exported ${res.done}, failed: ${res.failed.join(', ')}`
+                : `Export failed: ${res.error ?? res.failed.join(', ')}`
+            )
+          }
         }
-      })
+      } finally {
+        setBusy(false)
+        setProgress(null)
+      }
+    })()
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={busy ? undefined : onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Export “{image.name}”</h3>
+        <h3>{title}</h3>
 
         <label className="field">
           <span>Format</span>
@@ -66,6 +113,11 @@ export function ExportDialog({ onClose }: ExportDialogProps): React.JSX.Element 
           />
         </label>
 
+        {progress && (
+          <div className="export-message">
+            Exporting {progress.done} / {progress.total}…
+          </div>
+        )}
         {message && <div className="export-message">{message}</div>}
 
         <div className="modal-actions">
@@ -73,7 +125,7 @@ export function ExportDialog({ onClose }: ExportDialogProps): React.JSX.Element 
             Close
           </button>
           <button className="btn primary" onClick={doExport} disabled={busy}>
-            {busy ? 'Exporting…' : 'Export…'}
+            {busy ? 'Exporting…' : single ? 'Export…' : `Export ${targets.length}…`}
           </button>
         </div>
       </div>

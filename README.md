@@ -14,8 +14,9 @@ Quick, subtle, non-destructive touch-ups — open a folder, drag some sliders, a
 - **Filters (presets)** — 10 built-in subtle looks; hover to preview live, click to apply; save your own
 - **Non-destructive** — edits live in `photo.jpg.qpx` JSON sidecars next to your photos; originals are untouched; delete the sidecar to fully revert
 - **Undo/redo, copy/paste settings** between photos
-- **Export** — JPEG / PNG / WebP with quality and long-edge resize, processed at full resolution with the exact same math as the preview
-- **Library** — open or drag-drop a folder, filmstrip navigation, histogram, 1:1 zoom & pan, before/after compare
+- **Export** — JPEG / PNG / WebP with quality and long-edge resize, processed at full resolution with the exact same math as the preview; multi-select (Ctrl/Shift-click) for batch export with progress
+- **Library** — open or drag-drop a folder (TIFF included), fast cached thumbnails, filmstrip navigation, histogram, 1:1 zoom & pan, before/after compare
+- **Picks up where you left off** — reopens your last folder and photo, remembers window size and recent folders
 
 ## Keyboard shortcuts
 
@@ -50,6 +51,7 @@ Other scripts:
 npm run typecheck  # strict TS across main/preload/renderer
 npm test           # vitest: shared edit math + full export path (sharp)
 npm run dist       # build the Windows installer (release/)
+node scripts/make-samples.mjs  # generate a sample photo folder (incl. TIFF)
 ```
 
 ## Architecture (for contributors)

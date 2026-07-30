@@ -6,6 +6,7 @@ import { Viewer } from './components/Viewer'
 import { AdjustPanel } from './components/AdjustPanel'
 import { PresetsPanel } from './components/PresetsPanel'
 import { ExportDialog } from './components/ExportDialog'
+import { Toasts } from './components/Toasts'
 
 export default function App(): React.JSX.Element {
   const folder = useLibraryStore((s) => s.folder)
@@ -16,6 +17,13 @@ export default function App(): React.JSX.Element {
   const canUndo = useEditStore((s) => s.historyIndex > 0)
   const canRedo = useEditStore((s) => s.historyIndex < s.history.length - 1)
   const [exportOpen, setExportOpen] = useState(false)
+  const [recentsOpen, setRecentsOpen] = useState(false)
+  const recentFolders = useLibraryStore((s) => s.recentFolders)
+
+  // Restore the previous session (folder + photo) on first launch.
+  useEffect(() => {
+    void useLibraryStore.getState().restoreSession()
+  }, [])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
@@ -92,15 +100,40 @@ export default function App(): React.JSX.Element {
         <button className="btn" disabled={!hasImage} title="Export (Ctrl+E)" onClick={() => setExportOpen(true)}>
           Export…
         </button>
-        <button className="btn" onClick={() => void openFolder()}>
-          Open Folder…
-        </button>
+        <div className="open-group">
+          <button className="btn" onClick={() => void openFolder()}>
+            Open Folder…
+          </button>
+          {recentFolders.length > 0 && (
+            <button className="btn icon" title="Recent folders" onClick={() => setRecentsOpen(!recentsOpen)}>
+              ▾
+            </button>
+          )}
+          {recentsOpen && (
+            <div className="recents-menu" onMouseLeave={() => setRecentsOpen(false)}>
+              {recentFolders.map((f) => (
+                <div
+                  key={f}
+                  className="recents-item"
+                  title={f}
+                  onClick={() => {
+                    setRecentsOpen(false)
+                    void useLibraryStore.getState().openPath(f)
+                  }}
+                >
+                  {f}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </header>
       <PresetsPanel />
       <Viewer />
       <AdjustPanel />
       <Filmstrip />
       {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
+      <Toasts />
     </div>
   )
 }

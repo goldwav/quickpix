@@ -2,6 +2,8 @@ import { app, BrowserWindow, protocol, shell } from 'electron'
 import { join } from 'node:path'
 import { registerIpcHandlers } from './ipc'
 import { registerQpxProtocol } from './qpxProtocol'
+import { sweepCache } from './imageCache'
+import { flushSettings, getSettings, updateSettings } from './settings'
 import { QPX_SCHEME } from '@shared/protocol'
 
 // Must run before app.whenReady: grants qpx:// the privileges needed for
@@ -13,10 +15,12 @@ protocol.registerSchemesAsPrivileged([
   }
 ])
 
-function createWindow(): void {
+async function createWindow(): Promise<void> {
+  const settings = await getSettings()
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
+    ...settings.windowBounds,
     minWidth: 960,
     minHeight: 600,
     show: false,
@@ -45,6 +49,14 @@ function createWindow(): void {
     console.error(`[QuickPix] Renderer process gone: ${details.reason}`)
   })
 
+  const saveBounds = (): void => {
+    if (!win.isDestroyed() && !win.isMaximized() && !win.isMinimized()) {
+      updateSettings({ windowBounds: win.getBounds() })
+    }
+  }
+  win.on('resized', saveBounds)
+  win.on('moved', saveBounds)
+
   // Open target="_blank" links (e.g. About → GitHub) in the system browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) shell.openExternal(url)
@@ -61,12 +73,15 @@ function createWindow(): void {
 app.whenReady().then(() => {
   registerQpxProtocol()
   registerIpcHandlers()
-  createWindow()
+  void createWindow()
+  void sweepCache()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) void createWindow()
   })
 })
+
+app.on('before-quit', () => flushSettings())
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

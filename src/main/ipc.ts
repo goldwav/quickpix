@@ -5,7 +5,8 @@ import type { OpenFolderResult, Preset } from '@shared/types'
 import { isPathAllowed, listImages, setAllowedFolder } from './library'
 import { readSidecar, writeSidecar } from './sidecar'
 import { deletePreset, listPresets, savePreset } from './presets'
-import { exportImage, type ExportRequest } from './exporter'
+import { exportBatch, exportImage, type BatchExportRequest, type ExportRequest } from './exporter'
+import { getSettings, recordFolderOpened, updateSettings } from './settings'
 
 export function registerIpcHandlers(): void {
   ipcMain.handle('dialog:openFolder', async (event): Promise<OpenFolderResult | null> => {
@@ -20,6 +21,7 @@ export function registerIpcHandlers(): void {
 
     const folder = result.filePaths[0]
     setAllowedFolder(folder)
+    recordFolderOpened(folder)
     return { folder, images: await listImages(folder) }
   })
 
@@ -43,13 +45,27 @@ export function registerIpcHandlers(): void {
       const stat = await fs.stat(droppedPath)
       const folder = stat.isDirectory() ? droppedPath : dirname(droppedPath)
       setAllowedFolder(folder)
+      recordFolderOpened(folder)
       return { folder, images: await listImages(folder) }
     } catch {
       return null
     }
   })
 
+  ipcMain.handle('session:get', async () => {
+    const s = await getSettings()
+    return { lastFolder: s.lastFolder, lastSelectedPath: s.lastSelectedPath, recentFolders: s.recentFolders }
+  })
+
+  ipcMain.handle('session:setSelected', (_event, path: string) => {
+    updateSettings({ lastSelectedPath: path })
+  })
+
   ipcMain.handle('export:image', (event, req: ExportRequest) =>
     exportImage(BrowserWindow.fromWebContents(event.sender), req)
+  )
+
+  ipcMain.handle('export:batch', (event, req: BatchExportRequest) =>
+    exportBatch(BrowserWindow.fromWebContents(event.sender), req)
   )
 }

@@ -7,6 +7,7 @@ import {
   type EditParams
 } from '@shared/editParams'
 import type { HistogramData } from '../gl/pipeline'
+import { toast } from './uiStore'
 
 /** Numeric slider keys of EditParams (everything except curve/crop). */
 export type SliderKey = Exclude<keyof EditParams, 'curve' | 'crop'>
@@ -65,6 +66,7 @@ function scheduleSidecarWrite(path: string, params: EditParams): void {
     const payload = isNeutral(params) ? null : { version: 1, savedAt: new Date().toISOString(), params }
     window.quickpix.writeSidecar(path, payload).catch((err) => {
       console.error('[QuickPix] Sidecar write failed:', err)
+      toast('error', "Couldn't save edits — check disk space and folder permissions")
     })
   }, SIDECAR_DEBOUNCE_MS)
 }

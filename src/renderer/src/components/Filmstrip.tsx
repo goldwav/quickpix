@@ -1,11 +1,14 @@
 import { useEffect, useRef } from 'react'
 import { useLibraryStore } from '../state/libraryStore'
-import { getImageUrl } from '../lib/imageUrl'
+import { getThumbUrl } from '../lib/imageUrl'
 
 export function Filmstrip(): React.JSX.Element {
   const images = useLibraryStore((s) => s.images)
   const selectedIndex = useLibraryStore((s) => s.selectedIndex)
+  const selection = useLibraryStore((s) => s.selection)
   const select = useLibraryStore((s) => s.select)
+  const toggleInSelection = useLibraryStore((s) => s.toggleInSelection)
+  const selectRangeTo = useLibraryStore((s) => s.selectRangeTo)
   const stripRef = useRef<HTMLDivElement>(null)
 
   // Keep the selected thumbnail in view when navigating with arrow keys.
@@ -27,11 +30,15 @@ export function Filmstrip(): React.JSX.Element {
       {images.map((img, i) => (
         <div
           key={img.path}
-          className={`thumb${i === selectedIndex ? ' selected' : ''}`}
-          onClick={() => select(i)}
+          className={`thumb${i === selectedIndex ? ' selected' : ''}${selection.includes(img.path) ? ' in-selection' : ''}`}
+          onClick={(e) => {
+            if (e.ctrlKey || e.metaKey) toggleInSelection(i)
+            else if (e.shiftKey) selectRangeTo(i)
+            else select(i)
+          }}
           title={img.name}
         >
-          <img src={getImageUrl(img.path)} loading="lazy" draggable={false} alt={img.name} />
+          <img src={getThumbUrl(img.path)} loading="lazy" draggable={false} alt={img.name} />
           <div className="name">{img.name}</div>
         </div>
       ))}
