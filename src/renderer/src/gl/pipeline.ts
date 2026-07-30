@@ -20,9 +20,18 @@ export interface FitRect {
   h: number
 }
 
+export interface ViewTransform {
+  /** 1 = fit; >1 zooms in. */
+  zoom: number
+  /** Pan offset in device pixels. */
+  panX: number
+  panY: number
+}
+
 export interface RenderOptions {
   /** Render the full uncropped frame (used by the crop tool). */
   ignoreCrop?: boolean
+  view?: ViewTransform
 }
 
 const HIST_SIZE = 128
@@ -124,12 +133,18 @@ export class GLPipeline {
     gl.clearColor(0.094, 0.094, 0.094, 1) // matches --bg-app #181818
     gl.clear(gl.COLOR_BUFFER_BIT)
 
-    // Aspect-fit letterbox with a small margin.
+    // Aspect-fit letterbox with a small margin, then apply zoom/pan.
     const margin = 24
-    const scale = Math.min((cw - margin * 2) / crop.outW, (ch - margin * 2) / crop.outH)
+    const zoom = opts.view?.zoom ?? 1
+    const scale = Math.min((cw - margin * 2) / crop.outW, (ch - margin * 2) / crop.outH) * zoom
     const w = Math.max(1, Math.round(crop.outW * scale))
     const h = Math.max(1, Math.round(crop.outH * scale))
-    const fit: FitRect = { x: Math.round((cw - w) / 2), y: Math.round((ch - h) / 2), w, h }
+    const fit: FitRect = {
+      x: Math.round((cw - w) / 2 + (opts.view?.panX ?? 0)),
+      y: Math.round((ch - h) / 2 + (opts.view?.panY ?? 0)),
+      w,
+      h
+    }
     this.lastFitRect = fit
 
     if (!needDetail) {

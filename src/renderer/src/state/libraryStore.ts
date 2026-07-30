@@ -6,6 +6,7 @@ interface LibraryState {
   images: ImageFileInfo[]
   selectedIndex: number
   openFolder: () => Promise<void>
+  openPath: (path: string) => Promise<void>
   refresh: () => Promise<void>
   select: (index: number) => void
   selectNext: () => void
@@ -24,6 +25,18 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       folder: result.folder,
       images: result.images,
       selectedIndex: result.images.length > 0 ? 0 : -1
+    })
+  },
+
+  openPath: async (path: string) => {
+    const result = await window.quickpix.openPath(path)
+    if (!result) return
+    // If a file was dropped, select it within its folder.
+    const idx = result.images.findIndex((f) => f.path === path)
+    set({
+      folder: result.folder,
+      images: result.images,
+      selectedIndex: idx >= 0 ? idx : result.images.length > 0 ? 0 : -1
     })
   },
 

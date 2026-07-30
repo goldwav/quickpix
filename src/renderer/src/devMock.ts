@@ -143,6 +143,9 @@ export async function installDevMock(): Promise<void> {
   window.quickpix = {
     openFolder: async () => result,
     listImages: async () => infos,
+    openPath: async () => result,
+    getPathForFile: () => '',
+    exportImage: async () => ({ ok: false, error: 'Export requires the desktop app (npm run dev)' }),
     readSidecar: async (p) => sidecars.get(p) ?? null,
     writeSidecar: async (p, data) => {
       if (data === null) sidecars.delete(p)

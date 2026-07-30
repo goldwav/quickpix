@@ -26,14 +26,22 @@ export function Viewer(): React.JSX.Element {
   const [glError, setGlError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [fitRect, setFitRect] = useState<FitRect | null>(null)
+  const [view, setView] = useState({ zoom: 1, panX: 0, panY: 0 })
   const histTimer = useRef<number | null>(null)
+  const panDrag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
 
   const canvasRef = useCallback((el: HTMLCanvasElement | null) => setCanvasEl(el), [])
 
   // Keep the edit store pointed at the selected photo.
   useEffect(() => {
     activate(image?.path ?? null)
+    setView({ zoom: 1, panX: 0, panY: 0 })
   }, [image?.path, activate])
+
+  // The crop tool needs the plain fitted view.
+  useEffect(() => {
+    if (cropMode) setView({ zoom: 1, panX: 0, panY: 0 })
+  }, [cropMode])
 
   // Pipeline + resize observer lifecycle, tied to the canvas element.
   useEffect(() => {
@@ -63,7 +71,19 @@ export function Viewer(): React.JSX.Element {
     const observer = new ResizeObserver(sizeToContainer)
     observer.observe(container)
 
+    // Wheel zoom needs a non-passive listener to preventDefault.
+    const onWheel = (e: WheelEvent): void => {
+      if (useEditStore.getState().cropMode) return
+      e.preventDefault()
+      setView((v) => {
+        const zoom = Math.min(8, Math.max(1, v.zoom * Math.pow(1.0015, -e.deltaY)))
+        return zoom === 1 ? { zoom: 1, panX: 0, panY: 0 } : { ...v, zoom }
+      })
+    }
+    container.addEventListener('wheel', onWheel, { passive: false })
+
     return () => {
+      container.removeEventListener('wheel', onWheel)
       observer.disconnect()
       p.dispose()
       setPipeline(null)
@@ -125,8 +145,10 @@ export function Viewer(): React.JSX.Element {
         crop: { left: 0, top: 0, width: 1, height: 1, angle: effective.crop?.angle ?? 0 }
       }
     }
-    pipeline.render(effective)
     const dpr = window.devicePixelRatio || 1
+    pipeline.render(effective, {
+      view: cropMode ? undefined : { zoom: view.zoom, panX: view.panX * dpr, panY: view.panY * dpr }
+    })
     const f = pipeline.lastFitRect
     setFitRect({ x: f.x / dpr, y: f.y / dpr, w: f.w / dpr, h: f.h / dpr })
 
@@ -139,7 +161,7 @@ export function Viewer(): React.JSX.Element {
         s.setHistogram(pipeline.computeHistogram(s.showOriginal ? DEFAULT_EDIT_PARAMS : s.params))
       }, 120)
     }
-  }, [pipeline, imageReady, params, previewParams, showOriginal, cropMode])
+  }, [pipeline, imageReady, params, previewParams, showOriginal, cropMode, view])
 
   if (!image) {
     return (
@@ -155,6 +177,29 @@ export function Viewer(): React.JSX.Element {
     )
   }
 
+  const onPointerDown = (e: React.PointerEvent): void => {
+    if (cropMode || view.zoom === 1) return
+    panDrag.current = { x: e.clientX, y: e.clientY, panX: view.panX, panY: view.panY }
+    ;(e.target as Element).setPointerCapture(e.pointerId)
+  }
+  const onPointerMove = (e: React.PointerEvent): void => {
+    const d = panDrag.current
+    if (!d) return
+    setView((v) => ({ ...v, panX: d.panX + (e.clientX - d.x), panY: d.panY + (e.clientY - d.y) }))
+  }
+  const onPointerUp = (): void => {
+    panDrag.current = null
+  }
+  const onDoubleClick = (): void => {
+    if (cropMode || !pipeline) return
+    setView((v) => {
+      if (v.zoom !== 1) return { zoom: 1, panX: 0, panY: 0 }
+      const dpr = window.devicePixelRatio || 1
+      const oneToOne = Math.min(8, Math.max(1.5, (pipeline.imageWidth / pipeline.lastFitRect.w) * dpr))
+      return { zoom: oneToOne, panX: 0, panY: 0 }
+    })
+  }
+
   return (
     <div className="viewer">
       {glError ? (
@@ -163,7 +208,14 @@ export function Viewer(): React.JSX.Element {
           <p>{glError}</p>
         </div>
       ) : (
-        <canvas ref={canvasRef} className="gl-canvas" />
+        <canvas
+          ref={canvasRef}
+          className={`gl-canvas${view.zoom > 1 ? ' pannable' : ''}`}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onDoubleClick={onDoubleClick}
+        />
       )}
       {loading && <div className="loading-badge">Loading…</div>}
       {showOriginal && <div className="compare-badge">Original</div>}
