@@ -31,7 +31,19 @@ function createWindow(): void {
     }
   })
 
-  win.on('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => win.show())
+  // Never leave the window invisible if the first paint stalls (slow dev
+  // server, GPU init hiccup) — an unshown window looks like a failed launch.
+  setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) win.show()
+  }, 3000)
+
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    console.error(`[QuickPix] Renderer failed to load (${code}) ${desc} — ${url}`)
+  })
+  win.webContents.on('render-process-gone', (_e, details) => {
+    console.error(`[QuickPix] Renderer process gone: ${details.reason}`)
+  })
 
   // Open target="_blank" links (e.g. About → GitHub) in the system browser.
   win.webContents.setWindowOpenHandler(({ url }) => {

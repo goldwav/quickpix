@@ -7,7 +7,7 @@
   "author": "QuickPix contributors",
   "homepage": "https://github.com/quickpix/quickpix",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "electron-vite dev --watch",
     "dev:web": "vite --config vite.web.config.ts",
     "build": "electron-vite build",
     "start": "electron-vite preview",
