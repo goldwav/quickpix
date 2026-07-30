@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useLibraryStore } from '../state/libraryStore'
-import { pathToQpxUrl } from '@shared/protocol'
+import { getImageUrl } from '../lib/imageUrl'
 
 export function Filmstrip(): React.JSX.Element {
   const images = useLibraryStore((s) => s.images)
@@ -31,7 +31,7 @@ export function Filmstrip(): React.JSX.Element {
           onClick={() => select(i)}
           title={img.name}
         >
-          <img src={pathToQpxUrl(img.path)} loading="lazy" draggable={false} alt={img.name} />
+          <img src={getImageUrl(img.path)} loading="lazy" draggable={false} alt={img.name} />
           <div className="name">{img.name}</div>
         </div>
       ))}

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useLibraryStore } from './state/libraryStore'
+import { useEditStore } from './state/editStore'
 import { Filmstrip } from './components/Filmstrip'
 import { Viewer } from './components/Viewer'
 import { AdjustPanel } from './components/AdjustPanel'
@@ -11,17 +12,25 @@ export default function App(): React.JSX.Element {
   const selectPrev = useLibraryStore((s) => s.selectPrev)
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
+    const onKeyDown = (e: KeyboardEvent): void => {
       if (e.target instanceof HTMLInputElement) return
       if (e.key === 'ArrowRight') selectNext()
       if (e.key === 'ArrowLeft') selectPrev()
+      if (e.key === '\\') useEditStore.getState().setShowOriginal(true)
       if (e.key === 'o' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault()
         void openFolder()
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const onKeyUp = (e: KeyboardEvent): void => {
+      if (e.key === '\\') useEditStore.getState().setShowOriginal(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
   }, [openFolder, selectNext, selectPrev])
 
   return (

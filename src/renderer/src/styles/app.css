@@ -197,6 +197,122 @@ body {
   padding: 8px 12px 12px;
 }
 
+.panel-actions {
+  display: flex;
+  justify-content: center;
+  padding: 14px 12px 4px;
+}
+
+/* ---------- Viewer canvas & badges ---------- */
+
+.viewer .gl-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.loading-badge,
+.compare-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 3px 10px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--text);
+  pointer-events: none;
+}
+
+.compare-badge {
+  border: 1px solid var(--border-light);
+}
+
+/* ---------- Histogram ---------- */
+
+.histogram {
+  padding: 12px 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.histogram canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 3px;
+  background: #111;
+}
+
+/* ---------- Sliders ---------- */
+
+.slider-row {
+  margin-bottom: 9px;
+}
+
+.slider-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.slider-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.slider-value {
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.slider-value.active {
+  color: var(--text);
+}
+
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 14px;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: 2px;
+  background: linear-gradient(to right, #555, #777);
+  border-radius: 1px;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: #b5b5b5;
+  border: 1px solid #1a1a1a;
+  transition: background 0.1s;
+}
+
+input[type='range']:hover::-webkit-slider-thumb {
+  background: #e0e0e0;
+}
+
+input[type='range']:active::-webkit-slider-thumb {
+  background: var(--accent);
+}
+
+.section-header .chevron {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
 /* ---------- Filmstrip ---------- */
 
 .filmstrip {

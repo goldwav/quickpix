@@ -1,9 +1,129 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLibraryStore, useSelectedImage } from '../state/libraryStore'
-import { pathToQpxUrl } from '@shared/protocol'
+import { useEditStore } from '../state/editStore'
+import { DEFAULT_EDIT_PARAMS } from '@shared/editParams'
+import { getImageUrl } from '../lib/imageUrl'
+import { GLPipeline } from '../gl/pipeline'
+
+/** Cap preview textures; full resolution is only needed at export time. */
+const MAX_PREVIEW_DIM = 6144
 
 export function Viewer(): React.JSX.Element {
   const image = useSelectedImage()
   const openFolder = useLibraryStore((s) => s.openFolder)
+  const params = useEditStore((s) => s.params)
+  const showOriginal = useEditStore((s) => s.showOriginal)
+  const activate = useEditStore((s) => s.activate)
+
+  // The canvas element lives in state (set via callback ref) so effects
+  // reliably re-run when it mounts/unmounts — refs alone don't trigger that.
+  const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null)
+  const [pipeline, setPipeline] = useState<GLPipeline | null>(null)
+  const [imageReady, setImageReady] = useState(false)
+  const [glError, setGlError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const histTimer = useRef<number | null>(null)
+
+  const canvasRef = useCallback((el: HTMLCanvasElement | null) => setCanvasEl(el), [])
+
+  // Keep the edit store pointed at the selected photo.
+  useEffect(() => {
+    activate(image?.path ?? null)
+  }, [image?.path, activate])
+
+  // Pipeline + resize observer lifecycle, tied to the canvas element.
+  useEffect(() => {
+    if (!canvasEl) return
+    let p: GLPipeline
+    try {
+      p = new GLPipeline(canvasEl)
+    } catch (err) {
+      setGlError(err instanceof Error ? err.message : String(err))
+      return
+    }
+    setGlError(null)
+    setPipeline(p)
+
+    const container = canvasEl.parentElement as HTMLElement
+    const sizeToContainer = (): void => {
+      const dpr = window.devicePixelRatio || 1
+      canvasEl.width = Math.max(1, Math.round(container.clientWidth * dpr))
+      canvasEl.height = Math.max(1, Math.round(container.clientHeight * dpr))
+      if (p.hasImage) {
+        const s = useEditStore.getState()
+        p.render(s.showOriginal ? DEFAULT_EDIT_PARAMS : s.params)
+      }
+    }
+    // Size immediately (observer callbacks only fire on composited frames).
+    sizeToContainer()
+    const observer = new ResizeObserver(sizeToContainer)
+    observer.observe(container)
+
+    return () => {
+      observer.disconnect()
+      p.dispose()
+      setPipeline(null)
+      setImageReady(false)
+    }
+  }, [canvasEl])
+
+  // Load the selected image into the GPU whenever photo or pipeline changes.
+  useEffect(() => {
+    if (!pipeline || !image) return
+    let cancelled = false
+    setLoading(true)
+    setImageReady(false)
+
+    void (async () => {
+      try {
+        const resp = await fetch(getImageUrl(image.path))
+        const blob = await resp.blob()
+        let bitmap = await createImageBitmap(blob)
+        if (Math.max(bitmap.width, bitmap.height) > MAX_PREVIEW_DIM) {
+          const scale = MAX_PREVIEW_DIM / Math.max(bitmap.width, bitmap.height)
+          const scaled = await createImageBitmap(bitmap, {
+            resizeWidth: Math.round(bitmap.width * scale),
+            resizeHeight: Math.round(bitmap.height * scale),
+            resizeQuality: 'high'
+          })
+          bitmap.close()
+          bitmap = scaled
+        }
+        if (cancelled) {
+          bitmap.close()
+          return
+        }
+        pipeline.setImage(bitmap)
+        bitmap.close()
+        setImageReady(true)
+      } catch (err) {
+        console.error('[QuickPix] Failed to load image:', err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [pipeline, image])
+
+  // Render whenever anything visual changes. Synchronous — the GPU pass is a
+  // single cheap draw, and React already batches slider updates per event.
+  useEffect(() => {
+    if (!pipeline || !imageReady) return
+    pipeline.render(showOriginal ? DEFAULT_EDIT_PARAMS : params)
+
+    // Histogram readback stalls the GPU slightly — throttle it.
+    if (histTimer.current === null) {
+      histTimer.current = window.setTimeout(() => {
+        histTimer.current = null
+        if (!pipeline.hasImage) return
+        const s = useEditStore.getState()
+        s.setHistogram(pipeline.computeHistogram(s.showOriginal ? DEFAULT_EDIT_PARAMS : s.params))
+      }, 120)
+    }
+  }, [pipeline, imageReady, params, showOriginal])
 
   if (!image) {
     return (
@@ -21,7 +141,16 @@ export function Viewer(): React.JSX.Element {
 
   return (
     <div className="viewer">
-      <img className="preview" src={pathToQpxUrl(image.path)} alt={image.name} draggable={false} />
+      {glError ? (
+        <div className="empty-state">
+          <h2>Graphics error</h2>
+          <p>{glError}</p>
+        </div>
+      ) : (
+        <canvas ref={canvasRef} className="gl-canvas" />
+      )}
+      {loading && <div className="loading-badge">Loading…</div>}
+      {showOriginal && <div className="compare-badge">Original</div>}
     </div>
   )
 }
