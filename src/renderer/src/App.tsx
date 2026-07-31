@@ -55,6 +55,12 @@ export default function App(): React.JSX.Element {
         selectPrev()
       } else if (e.key === '\\') {
         edit.setShowOriginal(true)
+      } else if (!mod && e.key >= '0' && e.key <= '5' && !(e.target instanceof HTMLInputElement)) {
+        useLibraryStore.getState().setRating(Number(e.key))
+      } else if (!mod && (e.key === 'p' || e.key === 'P') && !(e.target instanceof HTMLInputElement)) {
+        useLibraryStore.getState().setFlag('pick')
+      } else if (!mod && (e.key === 'x' || e.key === 'X') && !(e.target instanceof HTMLInputElement)) {
+        useLibraryStore.getState().setFlag('reject')
       }
     }
     const onKeyUp = (e: KeyboardEvent): void => {

@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs'
-import { isPathAllowed } from './library'
+import type { PhotoMeta } from '@shared/types'
+import { isPathAllowed, listImages } from './library'
 
 /**
  * Sidecar files hold the non-destructive edit state, next to the original:
@@ -19,6 +20,29 @@ export async function readSidecar(imagePath: string): Promise<unknown | null> {
   } catch {
     return null
   }
+}
+
+/** Ratings/flags for every image in a folder — one pass over its sidecars. */
+export async function readAllMeta(folder: string): Promise<Record<string, PhotoMeta>> {
+  if (!isPathAllowed(folder)) throw new Error('Folder not opened')
+  const result: Record<string, PhotoMeta> = {}
+  const images = await listImages(folder)
+  await Promise.all(
+    images.map(async (img) => {
+      try {
+        const raw = JSON.parse(await fs.readFile(sidecarPath(img.path), 'utf-8')) as {
+          rating?: unknown
+          flag?: unknown
+        }
+        const rating = typeof raw.rating === 'number' ? Math.min(5, Math.max(0, Math.round(raw.rating))) : 0
+        const flag = raw.flag === 'pick' || raw.flag === 'reject' ? raw.flag : null
+        if (rating > 0 || flag) result[img.path] = { rating, flag }
+      } catch {
+        // no sidecar / unreadable — no meta
+      }
+    })
+  )
+  return result
 }
 
 export async function writeSidecar(imagePath: string, data: unknown | null): Promise<void> {

@@ -1,13 +1,7 @@
 import { create } from 'zustand'
-import {
-  cloneParams,
-  DEFAULT_EDIT_PARAMS,
-  isNeutral,
-  normalizeParams,
-  type EditParams
-} from '@shared/editParams'
+import { cloneParams, DEFAULT_EDIT_PARAMS, normalizeParams, type EditParams } from '@shared/editParams'
 import type { HistogramData } from '../gl/pipeline'
-import { toast } from './uiStore'
+import { registerSidecarProviders, scheduleSidecarSync } from './sidecarSync'
 
 /** Numeric slider keys of EditParams (the scalar fields only). */
 export type SliderKey = Exclude<keyof EditParams, 'curve' | 'crop' | 'hsl' | 'split'>
@@ -15,7 +9,6 @@ export type SliderKey = Exclude<keyof EditParams, 'curve' | 'crop' | 'hsl' | 'sp
 /** History entries within this window and with the same label coalesce. */
 const HISTORY_COALESCE_MS = 600
 const HISTORY_MAX = 100
-const SIDECAR_DEBOUNCE_MS = 600
 
 interface EditState {
   /** Params of the photo currently being edited. */
@@ -56,20 +49,8 @@ interface EditState {
 
 let lastHistoryPush = 0
 let lastHistoryLabel = ''
-let sidecarTimer: number | undefined
 /** Guards against a slow sidecar read landing after the user switched photos. */
 let activateToken = 0
-
-function scheduleSidecarWrite(path: string, params: EditParams): void {
-  window.clearTimeout(sidecarTimer)
-  sidecarTimer = window.setTimeout(() => {
-    const payload = isNeutral(params) ? null : { version: 1, savedAt: new Date().toISOString(), params }
-    window.quickpix.writeSidecar(path, payload).catch((err) => {
-      console.error('[QuickPix] Sidecar write failed:', err)
-      toast('error', "Couldn't save edits — check disk space and folder permissions")
-    })
-  }, SIDECAR_DEBOUNCE_MS)
-}
 
 export const useEditStore = create<EditState>((set, get) => {
   /** Apply new params for the active photo: history, cache, sidecar. */
@@ -94,7 +75,7 @@ export const useEditStore = create<EditState>((set, get) => {
       historyIndex: newHistory.length - 1,
       byPath: activePath ? { ...get().byPath, [activePath]: next } : get().byPath
     })
-    if (activePath) scheduleSidecarWrite(activePath, next)
+    if (activePath) scheduleSidecarSync(activePath)
   }
 
   return {
@@ -133,7 +114,7 @@ export const useEditStore = create<EditState>((set, get) => {
         historyIndex: historyIndex - 1,
         byPath: activePath ? { ...get().byPath, [activePath]: params } : get().byPath
       })
-      if (activePath) scheduleSidecarWrite(activePath, params)
+      if (activePath) scheduleSidecarSync(activePath)
     },
 
     redo: () => {
@@ -145,7 +126,7 @@ export const useEditStore = create<EditState>((set, get) => {
         historyIndex: historyIndex + 1,
         byPath: activePath ? { ...get().byPath, [activePath]: params } : get().byPath
       })
-      if (activePath) scheduleSidecarWrite(activePath, params)
+      if (activePath) scheduleSidecarSync(activePath)
     },
 
     copySettings: () => {
@@ -196,6 +177,8 @@ export const useEditStore = create<EditState>((set, get) => {
     setHistogram: (h) => set({ histogram: h })
   }
 })
+
+registerSidecarProviders({ getParams: (path) => useEditStore.getState().byPath[path] })
 
 if (import.meta.env.DEV) {
   ;(window as unknown as Record<string, unknown>)['__qpEditStore'] = useEditStore

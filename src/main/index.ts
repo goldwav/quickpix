@@ -1,4 +1,5 @@
 import { app, BrowserWindow, protocol, shell } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import { join } from 'node:path'
 import { registerIpcHandlers } from './ipc'
 import { registerQpxProtocol } from './qpxProtocol'
@@ -89,6 +90,13 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   void createWindow()
   void sweepCache()
+
+  // Silent update check against GitHub Releases; notifies when downloaded.
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.error('[QuickPix] Update check failed:', err)
+    })
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow()

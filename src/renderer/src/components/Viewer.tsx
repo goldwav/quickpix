@@ -3,6 +3,7 @@ import { useLibraryStore, useSelectedImage } from '../state/libraryStore'
 import { useEditStore } from '../state/editStore'
 import { DEFAULT_EDIT_PARAMS } from '@shared/editParams'
 import { getImageUrl } from '../lib/imageUrl'
+import { decodeRawToBitmap, isRawPath } from '../lib/rawDecoder'
 import { toast } from '../state/uiStore'
 import { GLPipeline, type FitRect } from '../gl/pipeline'
 import { CropOverlay } from './CropOverlay'
@@ -101,9 +102,13 @@ export function Viewer(): React.JSX.Element {
 
     void (async () => {
       try {
-        const resp = await fetch(getImageUrl(image.path))
-        const blob = await resp.blob()
-        let bitmap = await createImageBitmap(blob)
+        let bitmap: ImageBitmap
+        if (isRawPath(image.path)) {
+          bitmap = await decodeRawToBitmap(image.path)
+        } else {
+          const resp = await fetch(getImageUrl(image.path))
+          bitmap = await createImageBitmap(await resp.blob())
+        }
         if (Math.max(bitmap.width, bitmap.height) > MAX_PREVIEW_DIM) {
           const scale = MAX_PREVIEW_DIM / Math.max(bitmap.width, bitmap.height)
           const scaled = await createImageBitmap(bitmap, {

@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
-import type { ExportBatchItem, ExportImageOptions } from '@shared/types'
+import type { DecodedRgba, ExportBatchItem, ExportImageOptions } from '@shared/types'
 import { cloneParams, DEFAULT_EDIT_PARAMS, normalizeParams } from '@shared/editParams'
 import { useEditStore } from '../state/editStore'
 import { getExportTargets, useLibraryStore } from '../state/libraryStore'
 import { toast } from '../state/uiStore'
+import { decodeRaw, isRawPath } from '../lib/rawDecoder'
+
+/** Full-size RAW decodes are big; cap how many ride in one batch. */
+const MAX_RAW_BATCH = 20
 
 interface ExportDialogProps {
   onClose: () => void
@@ -46,10 +50,28 @@ export function ExportDialog({ onClose }: ExportDialogProps): React.JSX.Element 
     setProgress(null)
     const options = { format, quality, resizeLongEdge: resize || undefined }
 
+    const decodeIfRaw = async (path: string): Promise<DecodedRgba | undefined> => {
+      if (!isRawPath(path)) return undefined
+      setMessage('Decoding RAW…')
+      const decoded = await decodeRaw(path, { halfSize: false })
+      setMessage(null)
+      return decoded
+    }
+
     void (async () => {
       try {
+        const rawCount = targets.filter((t) => isRawPath(t)).length
+        if (rawCount > MAX_RAW_BATCH) {
+          setMessage(`Too many RAW files for one batch (${rawCount}) — export up to ${MAX_RAW_BATCH} at a time.`)
+          return
+        }
         if (single) {
-          const res = await window.quickpix.exportImage(targets[0], await paramsFor(targets[0]), options)
+          const res = await window.quickpix.exportImage(
+            targets[0],
+            await paramsFor(targets[0]),
+            options,
+            await decodeIfRaw(targets[0])
+          )
           if (res.ok) {
             toast('success', `Exported to ${res.outPath}`)
             onClose()
@@ -58,7 +80,9 @@ export function ExportDialog({ onClose }: ExportDialogProps): React.JSX.Element 
           }
         } else {
           const items: ExportBatchItem[] = []
-          for (const path of targets) items.push({ imagePath: path, params: await paramsFor(path) })
+          for (const path of targets) {
+            items.push({ imagePath: path, params: await paramsFor(path), decoded: await decodeIfRaw(path) })
+          }
           const res = await window.quickpix.exportBatch(items, options)
           if (res.error === 'canceled') {
             // user closed the folder picker — stay in the dialog

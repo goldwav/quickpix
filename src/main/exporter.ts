@@ -2,6 +2,7 @@ import { BrowserWindow, dialog } from 'electron'
 import { promises as fs } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import { normalizeParams } from '@shared/editParams'
+import type { DecodedRgba } from '@shared/types'
 import { isPathAllowed } from './library'
 import { processImage, type ExportOptions } from './processImage'
 
@@ -9,6 +10,7 @@ export interface ExportRequest {
   imagePath: string
   params: unknown
   options: ExportOptions
+  decoded?: DecodedRgba
 }
 
 export interface ExportResult {
@@ -31,7 +33,7 @@ export async function exportImage(win: BrowserWindow | null, req: ExportRequest)
   if (result.canceled || !result.filePath) return { ok: false, error: 'canceled' }
 
   try {
-    const buffer = await processImage(req.imagePath, normalizeParams(req.params), req.options)
+    const buffer = await processImage(req.imagePath, normalizeParams(req.params), req.options, req.decoded)
     await fs.writeFile(result.filePath, buffer)
     return { ok: true, outPath: result.filePath }
   } catch (err) {
@@ -40,7 +42,7 @@ export async function exportImage(win: BrowserWindow | null, req: ExportRequest)
 }
 
 export interface BatchExportRequest {
-  items: { imagePath: string; params: unknown }[]
+  items: { imagePath: string; params: unknown; decoded?: DecodedRgba }[]
   options: ExportOptions
 }
 
@@ -85,7 +87,7 @@ export async function exportBatch(win: BrowserWindow | null, req: BatchExportReq
   const failed: string[] = []
   for (const item of req.items) {
     try {
-      const buffer = await processImage(item.imagePath, normalizeParams(item.params), req.options)
+      const buffer = await processImage(item.imagePath, normalizeParams(item.params), req.options, item.decoded)
       const base = basename(item.imagePath, extname(item.imagePath))
       await fs.writeFile(await uniqueOutPath(outDir, base, ext), buffer)
       done++

@@ -5,7 +5,7 @@
   "main": "out/main/index.js",
   "license": "GPL-3.0-only",
   "author": "QuickPix contributors",
-  "homepage": "https://github.com/quickpix/quickpix",
+  "homepage": "https://github.com/goldwav/quickpix",
   "scripts": {
     "dev": "electron-vite dev --watch",
     "dev:web": "vite --config vite.web.config.ts",
@@ -43,10 +43,19 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "goldwav",
+        "repo": "quickpix"
+      }
+    ]
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "exif-reader": "^2.0.3",
+    "libraw-wasm": "^1.6.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "sharp": "^0.35.3",

@@ -155,6 +155,14 @@ export async function installDevMock(): Promise<void> {
     exportBatch: async () => ({ ok: false, done: 0, failed: [], error: 'Export requires the desktop app (npm run dev)' }),
     onExportProgress: () => () => {},
     readSidecar: async (p) => sidecars.get(p) ?? null,
+    readAllMeta: async () => {
+      const out: Record<string, { rating: number; flag: 'pick' | 'reject' | null }> = {}
+      for (const [p, data] of sidecars) {
+        const d = data as { rating?: number; flag?: 'pick' | 'reject' | null }
+        if ((d.rating ?? 0) > 0 || d.flag) out[p] = { rating: d.rating ?? 0, flag: d.flag ?? null }
+      }
+      return out
+    },
     writeSidecar: async (p, data) => {
       if (data === null) sidecars.delete(p)
       else sidecars.set(p, data)

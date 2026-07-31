@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import { dirname } from 'node:path'
 import type { OpenFolderResult, Preset } from '@shared/types'
 import { isPathAllowed, listImages, setAllowedFolder } from './library'
-import { readSidecar, writeSidecar } from './sidecar'
+import { readAllMeta, readSidecar, writeSidecar } from './sidecar'
 import { deletePreset, listPresets, savePreset } from './presets'
 import { exportBatch, exportImage, type BatchExportRequest, type ExportRequest } from './exporter'
 import { getSettings, recordFolderOpened, updateSettings } from './settings'
@@ -34,6 +34,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('image:info', (_event, imagePath: string) => getImageInfo(imagePath))
 
   ipcMain.handle('sidecar:read', (_event, imagePath: string) => readSidecar(imagePath))
+  ipcMain.handle('sidecar:readAllMeta', (_event, folder: string) => readAllMeta(folder))
   ipcMain.handle('sidecar:write', (_event, imagePath: string, data: unknown | null) =>
     writeSidecar(imagePath, data)
   )

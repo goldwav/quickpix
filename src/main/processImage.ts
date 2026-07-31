@@ -1,6 +1,7 @@
 import sharp from 'sharp'
 import { applyEdits, type RawImage } from '@shared/editMath'
 import type { EditParams } from '@shared/editParams'
+import type { DecodedRgba } from '@shared/types'
 
 export interface ExportOptions {
   format: 'jpeg' | 'png' | 'webp'
@@ -18,20 +19,26 @@ export interface ExportOptions {
 export async function processImage(
   inputPath: string,
   params: EditParams,
-  options: ExportOptions
+  options: ExportOptions,
+  decoded?: DecodedRgba
 ): Promise<Buffer> {
-  // .rotate() with no args applies the EXIF orientation, matching what
-  // Chromium does when decoding for the preview.
-  const { data, info } = await sharp(inputPath)
-    .rotate()
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true })
-
-  const src: RawImage = {
-    data: new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength),
-    width: info.width,
-    height: info.height
+  let src: RawImage
+  if (decoded) {
+    // RAW files: pixels arrive pre-decoded from the renderer (LibRaw).
+    src = {
+      data: new Uint8ClampedArray(decoded.data.buffer, decoded.data.byteOffset, decoded.data.byteLength),
+      width: decoded.width,
+      height: decoded.height
+    }
+  } else {
+    // .rotate() with no args applies the EXIF orientation, matching what
+    // Chromium does when decoding for the preview.
+    const { data, info } = await sharp(inputPath).rotate().ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+    src = {
+      data: new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength),
+      width: info.width,
+      height: info.height
+    }
   }
 
   const result = applyEdits(src, params)

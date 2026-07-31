@@ -18,6 +18,8 @@ Quick, subtle, non-destructive touch-ups — open a folder, drag some sliders, a
 - **Non-destructive** — edits live in `photo.jpg.qpx` JSON sidecars next to your photos; originals are untouched; delete the sidecar to fully revert
 - **Undo/redo, copy/paste settings** between photos
 - **Export** — JPEG / PNG / WebP with quality and long-edge resize, processed at full resolution with the exact same math as the preview; multi-select (Ctrl/Shift-click) for batch export with progress
+- **RAW support** — CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2, PEF decoded via LibRaw (WASM); embedded-preview thumbnails, full-resolution export
+- **Culling** — 1–5 star ratings and pick/reject flags (P / X / 0–5 keys), stored in sidecars, with filmstrip filtering
 - **Library** — open or drag-drop a folder (TIFF included), fast cached thumbnails, filmstrip navigation, histogram, 1:1 zoom & pan, before/after compare
 - **Picks up where you left off** — reopens your last folder and photo, remembers window size and recent folders
 
@@ -31,6 +33,8 @@ Quick, subtle, non-destructive touch-ups — open a folder, drag some sliders, a
 | `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
 | `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste edit settings |
 | `Ctrl+E` | Export |
+| `1`–`5` / `0` | Star rating / clear |
+| `P` / `X` | Flag pick / reject (again to clear) |
 | Double-click image | Toggle 1:1 zoom |
 | Mouse wheel | Zoom, drag to pan |
 | Double-click slider | Reset slider |
@@ -81,10 +85,9 @@ Key design decisions:
 
 ## Roadmap
 
-- RAW support (LibRaw → WASM decoder feeding the same RGBA pipeline)
 - Local adjustments (masks, linear/radial gradients)
-- Ratings/flags and a catalog view
-- Code-signed installer + auto-updates
+- Catalog view and search
+- Code-signed installer
 - macOS/Linux builds (nothing in the codebase is Windows-specific)
 
 ## License

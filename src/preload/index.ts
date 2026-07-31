@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type {
+  DecodedRgba,
   ExportBatchItem,
   ExportBatchResult,
   ExportImageOptions,
@@ -8,6 +9,7 @@ import type {
   ImageFileInfo,
   ImageInfo,
   OpenFolderResult,
+  PhotoMeta,
   Preset,
   QuickPixApi,
   SessionInfo
@@ -21,8 +23,12 @@ const api: QuickPixApi = {
   getSession: (): Promise<SessionInfo> => ipcRenderer.invoke('session:get'),
   setSelectedPath: (path: string): Promise<void> => ipcRenderer.invoke('session:setSelected', path),
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
-  exportImage: (imagePath: string, params: unknown, options: ExportImageOptions): Promise<ExportImageResult> =>
-    ipcRenderer.invoke('export:image', { imagePath, params, options }),
+  exportImage: (
+    imagePath: string,
+    params: unknown,
+    options: ExportImageOptions,
+    decoded?: DecodedRgba
+  ): Promise<ExportImageResult> => ipcRenderer.invoke('export:image', { imagePath, params, options, decoded }),
   exportBatch: (items: ExportBatchItem[], options: ExportImageOptions): Promise<ExportBatchResult> =>
     ipcRenderer.invoke('export:batch', { items, options }),
   onExportProgress: (cb: (p: ExportProgress) => void): (() => void) => {
@@ -31,6 +37,8 @@ const api: QuickPixApi = {
     return () => ipcRenderer.removeListener('export:progress', listener)
   },
   readSidecar: (imagePath: string): Promise<unknown | null> => ipcRenderer.invoke('sidecar:read', imagePath),
+  readAllMeta: (folder: string): Promise<Record<string, PhotoMeta>> =>
+    ipcRenderer.invoke('sidecar:readAllMeta', folder),
   writeSidecar: (imagePath: string, data: unknown | null): Promise<void> =>
     ipcRenderer.invoke('sidecar:write', imagePath, data),
   listPresets: (): Promise<Preset[]> => ipcRenderer.invoke('presets:list'),
