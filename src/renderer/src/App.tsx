@@ -27,7 +27,11 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.target instanceof HTMLInputElement && e.target.type === 'text') return
+      const t = e.target
+      const isInput = t instanceof HTMLInputElement || t instanceof HTMLSelectElement
+      // Typing fields swallow all shortcuts; sliders only swallow arrows.
+      const isTypingField = t instanceof HTMLInputElement && t.type !== 'range'
+      if (isTypingField && !e.ctrlKey && !e.metaKey) return
       const edit = useEditStore.getState()
       const mod = e.ctrlKey || e.metaKey
 
@@ -49,17 +53,17 @@ export default function App(): React.JSX.Element {
       } else if (mod && e.key === 'e') {
         e.preventDefault()
         if (useLibraryStore.getState().selectedIndex >= 0) setExportOpen(true)
-      } else if (e.key === 'ArrowRight' && !(e.target instanceof HTMLInputElement)) {
+      } else if (e.key === 'ArrowRight' && !isInput) {
         selectNext()
-      } else if (e.key === 'ArrowLeft' && !(e.target instanceof HTMLInputElement)) {
+      } else if (e.key === 'ArrowLeft' && !isInput) {
         selectPrev()
       } else if (e.key === '\\') {
         edit.setShowOriginal(true)
-      } else if (!mod && e.key >= '0' && e.key <= '5' && !(e.target instanceof HTMLInputElement)) {
+      } else if (!mod && e.key >= '0' && e.key <= '5') {
         useLibraryStore.getState().setRating(Number(e.key))
-      } else if (!mod && (e.key === 'p' || e.key === 'P') && !(e.target instanceof HTMLInputElement)) {
+      } else if (!mod && (e.key === 'p' || e.key === 'P')) {
         useLibraryStore.getState().setFlag('pick')
-      } else if (!mod && (e.key === 'x' || e.key === 'X') && !(e.target instanceof HTMLInputElement)) {
+      } else if (!mod && (e.key === 'x' || e.key === 'X')) {
         useLibraryStore.getState().setFlag('reject')
       }
     }

@@ -7,6 +7,7 @@ import { decodeRawToBitmap, isRawPath } from '../lib/rawDecoder'
 import { toast } from '../state/uiStore'
 import { GLPipeline, type FitRect } from '../gl/pipeline'
 import { CropOverlay } from './CropOverlay'
+import { CullBar } from './CullBar'
 
 /** Cap preview textures; full resolution is only needed at export time. */
 const MAX_PREVIEW_DIM = 6144
@@ -226,6 +227,7 @@ export function Viewer(): React.JSX.Element {
       )}
       {loading && <div className="loading-badge">Loading…</div>}
       {showOriginal && <div className="compare-badge">Original</div>}
+      {!cropMode && <CullBar />}
       {cropMode && fitRect && pipeline && (
         <CropOverlay fit={fitRect} imageWidth={pipeline.imageWidth} imageHeight={pipeline.imageHeight} />
       )}

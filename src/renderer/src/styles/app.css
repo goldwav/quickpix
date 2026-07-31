@@ -262,6 +262,69 @@ body {
   cursor: grabbing;
 }
 
+/* ---------- Cull bar (stars + flags) ---------- */
+
+.cull-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(24, 24, 24, 0.85);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 4px 12px;
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+
+.cull-bar:hover {
+  opacity: 1;
+}
+
+.cull-stars {
+  display: flex;
+  gap: 2px;
+}
+
+.cull-star {
+  font-size: 17px;
+  color: #4a4a4a;
+  cursor: pointer;
+  transition: color 0.1s;
+  line-height: 1;
+}
+
+.cull-star:hover {
+  color: #b09030;
+}
+
+.cull-star.active {
+  color: #e8c04a;
+}
+
+.cull-flag {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: #4a4a4a;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.cull-flag.pick:hover,
+.cull-flag.pick.active {
+  color: #5cbf5c;
+}
+
+.cull-flag.reject:hover,
+.cull-flag.reject.active {
+  color: #e05a4e;
+}
+
 /* ---------- Modal (export) ---------- */
 
 .modal-backdrop {
