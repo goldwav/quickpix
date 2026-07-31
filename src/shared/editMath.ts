@@ -1,5 +1,5 @@
 import { bakeCurveLut } from './curve'
-import type { EditParams } from './editParams'
+import { HSL_BAND_CENTERS, type EditParams } from './editParams'
 
 /**
  * CPU implementation of the GPU pipeline, used for full-resolution export
@@ -26,6 +26,41 @@ const smoothstep = (e0: number, e1: number, x: number): number => {
 }
 const fract = (v: number): number => v - Math.floor(v)
 const hash = (x: number, y: number): number => fract(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453)
+
+/** h, s, l all 0..1 (mirrors adjust.frag rgb2hsl). */
+function rgb2hsl(r: number, g: number, b: number): [number, number, number] {
+  const mx = Math.max(r, g, b)
+  const mn = Math.min(r, g, b)
+  const l = (mx + mn) * 0.5
+  if (mx === mn) return [0, 0, l]
+  const d = mx - mn
+  const s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn)
+  let h: number
+  if (mx === r) h = (g - b) / d + (g < b ? 6 : 0)
+  else if (mx === g) h = (b - r) / d + 2
+  else h = (r - g) / d + 4
+  return [h / 6, s, l]
+}
+
+function hue2channel(p: number, q: number, t: number): number {
+  t = fract(t)
+  if (t < 1 / 6) return p + (q - p) * 6 * t
+  if (t < 0.5) return q
+  if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6
+  return p
+}
+
+function hsl2rgb(h: number, s: number, l: number): [number, number, number] {
+  if (s === 0) return [l, l, l]
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s
+  const p = 2 * l - q
+  return [hue2channel(p, q, h + 1 / 3), hue2channel(p, q, h), hue2channel(p, q, h - 1 / 3)]
+}
+
+function bandWeight(hueDeg: number, center: number): number {
+  const d = Math.abs(((((hueDeg - center + 180) % 360) + 360) % 360) - 180)
+  return Math.max(0, 1 - d / 45)
+}
 
 /** Output dimensions for a given source size + params (crop applied). */
 export function outputDims(width: number, height: number, params: EditParams): { width: number; height: number } {
@@ -113,6 +148,18 @@ export function applyColor(img: RawImage, params: EditParams): void {
   const whitePoint = 1 - 0.25 * whites
   const blackPoint = -0.25 * blacks
   const levelDiv = Math.max(whitePoint - blackPoint, 0.05)
+
+  const hslHue = params.hsl.hue.map((v) => v / 100)
+  const hslSat = params.hsl.sat.map((v) => v / 100)
+  const hslLum = params.hsl.lum.map((v) => v / 100)
+  const hslActive = hslHue.some((v) => v !== 0) || hslSat.some((v) => v !== 0) || hslLum.some((v) => v !== 0)
+  const splitShadowSat = params.split.shadowSat / 100
+  const splitHighSat = params.split.highlightSat / 100
+  const splitActive = splitShadowSat > 0 || splitHighSat > 0
+  const splitMid = 0.5 + (params.split.balance / 100) * 0.25
+  const shadowTint = hsl2rgb(params.split.shadowHue / 360, 1, 0.5)
+  const highTint = hsl2rgb(params.split.highlightHue / 360, 1, 0.5)
+
   const d = img.data
   const w = img.width
   const h = img.height
@@ -192,10 +239,45 @@ export function applyColor(img: RawImage, params: EditParams): void {
       g = clamp01(g)
       b = clamp01(b)
 
+      // HSL color mixer (mirrors adjust.frag: neutral-protected 8 bands)
+      if (hslActive) {
+        const [hh, hs, hl] = rgb2hsl(r, g, b)
+        const neutralMask = smoothstep(0.03, 0.12, hs)
+        if (neutralMask > 0) {
+          const hueDeg = hh * 360
+          let hueShift = 0
+          let satAdj = 0
+          let lumAdj = 0
+          for (let bi = 0; bi < 8; bi++) {
+            const bw = bandWeight(hueDeg, HSL_BAND_CENTERS[bi]) * neutralMask
+            hueShift += bw * hslHue[bi] * 30
+            satAdj += bw * hslSat[bi]
+            lumAdj += bw * hslLum[bi]
+          }
+          const nh = fract(hh + hueShift / 360)
+          const ns = clamp01(hs * (1 + satAdj))
+          const nl = clamp01(hl * (1 + lumAdj * 0.5))
+          ;[r, g, b] = hsl2rgb(nh, ns, nl)
+        }
+      }
+
       // Tone curve LUT
       r = lut[Math.round(r * 255) * 4] / 255
       g = lut[Math.round(g * 255) * 4 + 1] / 255
       b = lut[Math.round(b * 255) * 4 + 2] / 255
+
+      // Split toning (mirrors adjust.frag)
+      if (splitActive) {
+        const lum = lumaOf(r, g, b)
+        const highW = smoothstep(splitMid, 1, lum)
+        const shadowW = 1 - smoothstep(0, splitMid, lum)
+        r += (shadowTint[0] - 0.5) * splitShadowSat * 0.3 * shadowW + (highTint[0] - 0.5) * splitHighSat * 0.3 * highW
+        g += (shadowTint[1] - 0.5) * splitShadowSat * 0.3 * shadowW + (highTint[1] - 0.5) * splitHighSat * 0.3 * highW
+        b += (shadowTint[2] - 0.5) * splitShadowSat * 0.3 * shadowW + (highTint[2] - 0.5) * splitHighSat * 0.3 * highW
+        r = clamp01(r)
+        g = clamp01(g)
+        b = clamp01(b)
+      }
 
       // Vignette
       const u = (x + 0.5) / w - 0.5

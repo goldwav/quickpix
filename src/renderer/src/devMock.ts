@@ -145,6 +145,10 @@ export async function installDevMock(): Promise<void> {
     listImages: async () => infos,
     openPath: async () => result,
     getPathForFile: () => '',
+    getImageInfo: async (p) => {
+      const found = infos.find((i) => i.path === p)
+      return { width: 1600, height: 1067, format: 'png', camera: found ? 'Dev Mock Camera' : undefined }
+    },
     getSession: async () => ({ recentFolders: [] }),
     setSelectedPath: async () => {},
     exportImage: async () => ({ ok: false, error: 'Export requires the desktop app (npm run dev)' }),

@@ -1,9 +1,12 @@
 import { useEditStore, type SliderKey } from '../state/editStore'
 import { useSelectedImage } from '../state/libraryStore'
+import { ColorMixPanel } from './ColorMixPanel'
 import { CurveEditor } from './CurveEditor'
 import { Histogram } from './Histogram'
+import { InfoStrip } from './InfoStrip'
 import { PanelSection } from './PanelSection'
 import { Slider } from './Slider'
+import { SplitToningPanel } from './SplitToningPanel'
 
 const fmtEv = (v: number): string => (v > 0 ? `+${v.toFixed(2)}` : v.toFixed(2))
 
@@ -30,6 +33,7 @@ export function AdjustPanel(): React.JSX.Element {
   return (
     <aside className="panel">
       <Histogram />
+      <InfoStrip />
 
       <div className="tool-row">
         <button className={`btn${cropMode ? ' primary' : ''}`} onClick={() => setCropMode(!cropMode)}>
@@ -68,6 +72,14 @@ export function AdjustPanel(): React.JSX.Element {
 
       <PanelSection title="Tone Curve" defaultOpen={false}>
         <CurveEditor />
+      </PanelSection>
+
+      <PanelSection title="Color Mix" defaultOpen={false}>
+        <ColorMixPanel />
+      </PanelSection>
+
+      <PanelSection title="Split Toning" defaultOpen={false}>
+        <SplitToningPanel />
       </PanelSection>
 
       <PanelSection title="Detail" defaultOpen={false}>

@@ -20,6 +20,18 @@ uniform float u_saturation; // -1..1
 uniform float u_vignette;   // -1..1 (negative darkens corners)
 uniform float u_grain;      // 0..1
 
+// HSL mixer: per-band adjustments, -1..1
+uniform float u_hslHue[8];
+uniform float u_hslSat[8];
+uniform float u_hslLum[8];
+
+// Split toning: hues 0..1, sats 0..1, balance -1..1
+uniform float u_splitShadowHue;
+uniform float u_splitShadowSat;
+uniform float u_splitHighHue;
+uniform float u_splitHighSat;
+uniform float u_splitBalance;
+
 // Crop/straighten: output uv -> crop rect in rotated frame -> inverse-rotated
 // source uv. Identity when no crop: origin (0,0), size (1,1), cos 1, sin 0, scale 1.
 uniform vec2 u_cropOrigin;
@@ -38,6 +50,43 @@ float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+// h, s, l all 0..1
+vec3 rgb2hsl(vec3 c) {
+  float mx = max(c.r, max(c.g, c.b));
+  float mn = min(c.r, min(c.g, c.b));
+  float l = (mx + mn) * 0.5;
+  if (mx == mn) return vec3(0.0, 0.0, l);
+  float d = mx - mn;
+  float s = l > 0.5 ? d / (2.0 - mx - mn) : d / (mx + mn);
+  float h;
+  if (mx == c.r) h = (c.g - c.b) / d + (c.g < c.b ? 6.0 : 0.0);
+  else if (mx == c.g) h = (c.b - c.r) / d + 2.0;
+  else h = (c.r - c.g) / d + 4.0;
+  return vec3(h / 6.0, s, l);
+}
+
+float hue2channel(float p, float q, float t) {
+  t = fract(t);
+  if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
+  if (t < 0.5) return q;
+  if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+  return p;
+}
+
+vec3 hsl2rgb(vec3 hsl) {
+  if (hsl.y == 0.0) return vec3(hsl.z);
+  float q = hsl.z < 0.5 ? hsl.z * (1.0 + hsl.y) : hsl.z + hsl.y - hsl.z * hsl.y;
+  float p = 2.0 * hsl.z - q;
+  return vec3(hue2channel(p, q, hsl.x + 1.0 / 3.0), hue2channel(p, q, hsl.x), hue2channel(p, q, hsl.x - 1.0 / 3.0));
+}
+
+const float BAND_CENTERS[8] = float[](0.0, 30.0, 60.0, 120.0, 180.0, 240.0, 280.0, 320.0);
+
+float bandWeight(float hueDeg, float center) {
+  float d = abs(mod(hueDeg - center + 180.0, 360.0) - 180.0);
+  return max(0.0, 1.0 - d / 45.0);
 }
 
 void main() {
@@ -90,10 +139,43 @@ void main() {
 
   c = clamp(c, 0.0, 1.0);
 
+  // --- HSL color mixer: 8 hue bands, neutral-protected ---
+  vec3 hsl = rgb2hsl(c);
+  float neutralMask = smoothstep(0.03, 0.12, hsl.y);
+  if (neutralMask > 0.0) {
+    float hueDeg = hsl.x * 360.0;
+    float hueShift = 0.0;
+    float satAdj = 0.0;
+    float lumAdj = 0.0;
+    for (int i = 0; i < 8; i++) {
+      float w = bandWeight(hueDeg, BAND_CENTERS[i]) * neutralMask;
+      hueShift += w * u_hslHue[i] * 30.0; // ±30° at full slider
+      satAdj += w * u_hslSat[i];
+      lumAdj += w * u_hslLum[i];
+    }
+    hsl.x = fract(hsl.x + hueShift / 360.0);
+    hsl.y = clamp(hsl.y * (1.0 + satAdj), 0.0, 1.0);
+    hsl.z = clamp(hsl.z * (1.0 + lumAdj * 0.5), 0.0, 1.0);
+    c = hsl2rgb(hsl);
+  }
+
   // --- Tone curve LUT (master baked into per-channel entries) ---
   c.r = texture(u_curve, vec2(c.r * (255.0 / 256.0) + 0.5 / 256.0, 0.5)).r;
   c.g = texture(u_curve, vec2(c.g * (255.0 / 256.0) + 0.5 / 256.0, 0.5)).g;
   c.b = texture(u_curve, vec2(c.b * (255.0 / 256.0) + 0.5 / 256.0, 0.5)).b;
+
+  // --- Split toning ---
+  if (u_splitShadowSat > 0.0 || u_splitHighSat > 0.0) {
+    float lum = luma(c);
+    float mid = 0.5 + u_splitBalance * 0.25;
+    float highW = smoothstep(mid, 1.0, lum);
+    float shadowW = 1.0 - smoothstep(0.0, mid, lum);
+    vec3 shadowTint = hsl2rgb(vec3(u_splitShadowHue, 1.0, 0.5));
+    vec3 highTint = hsl2rgb(vec3(u_splitHighHue, 1.0, 0.5));
+    c += (shadowTint - 0.5) * (u_splitShadowSat * 0.3) * shadowW;
+    c += (highTint - 0.5) * (u_splitHighSat * 0.3) * highW;
+    c = clamp(c, 0.0, 1.0);
+  }
 
   // --- Vignette (radial in the final composition) ---
   vec2 p = v_uv - 0.5;

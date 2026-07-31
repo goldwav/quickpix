@@ -29,6 +29,23 @@ export interface Preset {
   params: unknown
 }
 
+/** Camera/photo metadata for the info strip. All fields optional. */
+export interface ImageInfo {
+  width?: number
+  height?: number
+  format?: string
+  camera?: string
+  lens?: string
+  /** Exposure time in seconds. */
+  exposureTime?: number
+  fNumber?: number
+  iso?: number
+  /** Focal length in mm. */
+  focalLength?: number
+  /** ISO date string. */
+  takenAt?: string
+}
+
 export interface SessionInfo {
   lastFolder?: string
   lastSelectedPath?: string
@@ -73,6 +90,8 @@ export interface QuickPixApi {
   listImages(folder: string): Promise<ImageFileInfo[]>
   /** Open a dropped file/folder path (folder of the file is opened). */
   openPath(path: string): Promise<OpenFolderResult | null>
+  /** Dimensions + EXIF for the info strip. */
+  getImageInfo(imagePath: string): Promise<ImageInfo>
   /** Restore-session info: last folder/photo and recent folders. */
   getSession(): Promise<SessionInfo>
   /** Remember the currently selected photo for next launch. */

@@ -9,8 +9,8 @@ import {
 import type { HistogramData } from '../gl/pipeline'
 import { toast } from './uiStore'
 
-/** Numeric slider keys of EditParams (everything except curve/crop). */
-export type SliderKey = Exclude<keyof EditParams, 'curve' | 'crop'>
+/** Numeric slider keys of EditParams (the scalar fields only). */
+export type SliderKey = Exclude<keyof EditParams, 'curve' | 'crop' | 'hsl' | 'split'>
 
 /** History entries within this window and with the same label coalesce. */
 const HISTORY_COALESCE_MS = 600

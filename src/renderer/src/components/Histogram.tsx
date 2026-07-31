@@ -47,9 +47,26 @@ export function Histogram(): React.JSX.Element {
     ctx.globalCompositeOperation = 'source-over'
   }, [histogram])
 
+  // Clipping: fraction of pixels pinned to pure black / pure white.
+  let shadowClip = 0
+  let highlightClip = 0
+  if (histogram && histogram.total > 0) {
+    shadowClip = (histogram.r[0] + histogram.g[0] + histogram.b[0]) / (3 * histogram.total)
+    highlightClip = (histogram.r[255] + histogram.g[255] + histogram.b[255]) / (3 * histogram.total)
+  }
+  const CLIP_THRESHOLD = 0.001
+
   return (
     <div className="histogram">
       <canvas ref={canvasRef} width={W} height={H} />
+      <div
+        className={`clip-indicator left${shadowClip > CLIP_THRESHOLD ? ' active' : ''}`}
+        title={`Shadow clipping: ${(shadowClip * 100).toFixed(1)}%`}
+      />
+      <div
+        className={`clip-indicator right${highlightClip > CLIP_THRESHOLD ? ' active' : ''}`}
+        title={`Highlight clipping: ${(highlightClip * 100).toFixed(1)}%`}
+      />
     </div>
   )
 }

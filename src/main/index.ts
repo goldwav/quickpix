@@ -36,6 +36,8 @@ async function createWindow(): Promise<void> {
     minWidth: 960,
     minHeight: 600,
     show: false,
+    // Dev taskbar icon; packaged builds get it from the exe resources.
+    icon: join(app.getAppPath(), 'build/icon.ico'),
     backgroundColor: '#181818',
     autoHideMenuBar: true,
     title: 'QuickPix',

@@ -7,6 +7,7 @@ import { readSidecar, writeSidecar } from './sidecar'
 import { deletePreset, listPresets, savePreset } from './presets'
 import { exportBatch, exportImage, type BatchExportRequest, type ExportRequest } from './exporter'
 import { getSettings, recordFolderOpened, updateSettings } from './settings'
+import { getImageInfo } from './imageInfo'
 
 export function registerIpcHandlers(): void {
   ipcMain.handle('dialog:openFolder', async (event): Promise<OpenFolderResult | null> => {
@@ -29,6 +30,8 @@ export function registerIpcHandlers(): void {
     if (!isPathAllowed(folder)) throw new Error('Folder not opened')
     return listImages(folder)
   })
+
+  ipcMain.handle('image:info', (_event, imagePath: string) => getImageInfo(imagePath))
 
   ipcMain.handle('sidecar:read', (_event, imagePath: string) => readSidecar(imagePath))
   ipcMain.handle('sidecar:write', (_event, imagePath: string, data: unknown | null) =>

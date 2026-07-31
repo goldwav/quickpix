@@ -113,6 +113,90 @@ describe('applyEdits', () => {
   })
 })
 
+describe('HSL mixer', () => {
+  const withHsl = (channel: 'hue' | 'sat' | 'lum', band: number, value: number): EditParams => {
+    const p = params({})
+    p.hsl[channel][band] = value
+    return p
+  }
+
+  it('red luminance brightens red pixels but not blue pixels', () => {
+    const src = makeImage(4, 4, [200, 40, 40])
+    const outRed = applyEdits(src, withHsl('lum', 0, 80))
+    expect(px(outRed, 1, 1)[0]).toBeGreaterThan(200)
+
+    const blueSrc = makeImage(4, 4, [40, 40, 200])
+    const outBlue = applyEdits(blueSrc, withHsl('lum', 0, 80))
+    const [r, g, b] = px(outBlue, 1, 1)
+    expect(Math.abs(r - 40)).toBeLessThanOrEqual(1)
+    expect(Math.abs(g - 40)).toBeLessThanOrEqual(1)
+    expect(Math.abs(b - 200)).toBeLessThanOrEqual(1)
+  })
+
+  it('red desaturation grays out red pixels', () => {
+    const src = makeImage(4, 4, [200, 40, 40])
+    const out = applyEdits(src, withHsl('sat', 0, -100))
+    const [r, , b] = px(out, 1, 1)
+    expect(r - b).toBeLessThan(160) // spread shrinks vs original 160
+  })
+
+  it('hue shift moves red toward orange/yellow', () => {
+    const src = makeImage(4, 4, [200, 40, 40])
+    const out = applyEdits(src, withHsl('hue', 0, 100))
+    const [, g] = px(out, 1, 1)
+    expect(g).toBeGreaterThan(60) // green channel rises as hue rotates toward yellow
+  })
+
+  it('neutral grays are protected from the mixer', () => {
+    const src = makeImage(4, 4, [128, 128, 128])
+    const p = params({})
+    p.hsl.hue = p.hsl.hue.map(() => 100)
+    p.hsl.sat = p.hsl.sat.map(() => 100)
+    const out = applyEdits(src, p)
+    const [r, g, b] = px(out, 1, 1)
+    expect(Math.abs(r - 128)).toBeLessThanOrEqual(1)
+    expect(Math.abs(g - 128)).toBeLessThanOrEqual(1)
+    expect(Math.abs(b - 128)).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('split toning', () => {
+  it('warm highlights tint bright pixels, leave dark pixels alone', () => {
+    const p = params({})
+    p.split.highlightHue = 50 // warm yellow-orange
+    p.split.highlightSat = 80
+
+    const bright = applyEdits(makeImage(4, 4, [220, 220, 220]), p)
+    const [br, , bb] = px(bright, 1, 1)
+    expect(br).toBeGreaterThan(bb) // warmed
+
+    const dark = applyEdits(makeImage(4, 4, [30, 30, 30]), p)
+    const [dr, dg, db] = px(dark, 1, 1)
+    expect(Math.abs(dr - 30)).toBeLessThanOrEqual(1)
+    expect(Math.abs(dg - 30)).toBeLessThanOrEqual(1)
+    expect(Math.abs(db - 30)).toBeLessThanOrEqual(1)
+  })
+
+  it('cool shadows tint dark pixels blue', () => {
+    const p = params({})
+    p.split.shadowHue = 220
+    p.split.shadowSat = 80
+    const dark = applyEdits(makeImage(4, 4, [40, 40, 40]), p)
+    const [r, , b] = px(dark, 1, 1)
+    expect(b).toBeGreaterThan(r)
+  })
+
+  it('zero saturation is a no-op', () => {
+    const p = params({})
+    p.split.highlightHue = 120
+    const out = applyEdits(makeImage(4, 4, [150, 150, 150]), p)
+    const [r, g, b] = px(out, 1, 1)
+    expect(Math.abs(r - 150)).toBeLessThanOrEqual(1)
+    expect(Math.abs(g - 150)).toBeLessThanOrEqual(1)
+    expect(Math.abs(b - 150)).toBeLessThanOrEqual(1)
+  })
+})
+
 describe('geometry', () => {
   it('outputDims reflects the crop', () => {
     expect(outputDims(1000, 500, params({ crop: { left: 0.25, top: 0, width: 0.5, height: 1, angle: 0 } }))).toEqual({

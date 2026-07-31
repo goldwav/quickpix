@@ -267,6 +267,15 @@ export class GLPipeline {
     gl.uniform1f(loc('u_vignette'), params.vignette / 100)
     gl.uniform1f(loc('u_grain'), params.grain / 100)
 
+    gl.uniform1fv(loc('u_hslHue'), params.hsl.hue.map((v) => v / 100))
+    gl.uniform1fv(loc('u_hslSat'), params.hsl.sat.map((v) => v / 100))
+    gl.uniform1fv(loc('u_hslLum'), params.hsl.lum.map((v) => v / 100))
+    gl.uniform1f(loc('u_splitShadowHue'), params.split.shadowHue / 360)
+    gl.uniform1f(loc('u_splitShadowSat'), params.split.shadowSat / 100)
+    gl.uniform1f(loc('u_splitHighHue'), params.split.highlightHue / 360)
+    gl.uniform1f(loc('u_splitHighSat'), params.split.highlightSat / 100)
+    gl.uniform1f(loc('u_splitBalance'), params.split.balance / 100)
+
     gl.uniform2f(loc('u_cropOrigin'), crop.originX, crop.originY)
     gl.uniform2f(loc('u_cropSize'), crop.sizeX, crop.sizeY)
     gl.uniform2f(loc('u_imageSize'), this.imageWidth, this.imageHeight)
