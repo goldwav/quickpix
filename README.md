@@ -10,6 +10,9 @@ Quick, subtle, non-destructive touch-ups — open a folder, drag some sliders, a
 - **Real-time GPU editing** — every slider runs as a WebGL2 shader pass, so adjustments are instant even on large photos
 - **Lightroom-style adjustments** — Exposure, Contrast, Highlights, Shadows, Whites, Blacks, Temp, Tint, Vibrance, Saturation, Clarity, Sharpen, Vignette, Grain
 - **Tone curve** — master + per-channel RGB curves with monotone spline interpolation (no banding overshoot)
+- **Color Mix** — 8-band HSL mixer (hue / saturation / luminance per color), neutral-protected
+- **Split toning** — independent shadow and highlight tints with balance
+- **Histogram clipping indicators** and an EXIF strip (camera, focal length, ƒ-stop, shutter, ISO)
 - **Crop & straighten** — aspect presets, rule-of-thirds grid, ±45° straighten with auto-fill (no blank corners)
 - **Filters (presets)** — 10 built-in subtle looks; hover to preview live, click to apply; save your own
 - **Non-destructive** — edits live in `photo.jpg.qpx` JSON sidecars next to your photos; originals are untouched; delete the sidecar to fully revert
@@ -80,9 +83,8 @@ Key design decisions:
 
 - RAW support (LibRaw → WASM decoder feeding the same RGBA pipeline)
 - Local adjustments (masks, linear/radial gradients)
-- Batch export and multi-select
 - Ratings/flags and a catalog view
-- HSL per-color mixer, split toning
+- Code-signed installer + auto-updates
 - macOS/Linux builds (nothing in the codebase is Windows-specific)
 
 ## License
